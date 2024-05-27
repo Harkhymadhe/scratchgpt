@@ -1,0 +1,7 @@
+/*.py
+.idea/*
+scripts/../
+scripts/__pycache__/*
+scripts/io.py
+scripts/text.txt
+scripts/scrap.py
