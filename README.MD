@@ -1,30 +1,26 @@
-## GPT-Clone
+## LLM
 
 ---
 
 ### Overview
 
 ---
-This project is an attempt to code up the following from scratch:
+This project is an attempt to code up the GPT model family from scratch. This involved coding p the below:
 
 1. Attention mechanism
     
-    a. Self-attention (&#9989;)
+    a. Self- and Cross-attention (&#9989;)
 
-    b. Cross-attention (&#9989;)
-
-    c. Narrow attention (&#9989;)
-
-    d. Wide attention (&#9989;)
+    b. Wide and Narrow attention (&#9989;)
     
-    d. Positional encoding (&#9083;, &#8987;)
+    c. Positional encoding (&#9083;, &#8987;)
 
 
 2. Transformer architecture
 
-    a. Transfomer v1 i.e., Encoder-Decoder (&#9989;)
+    a. Transformer v1 i.e., Encoder-Decoder (&#9989;)
 
-    b. Transfomer v2 i.e., Decoder-only (&#9989;)
+    b. Transformer v2 i.e., Decoder-only (&#9989;)
 
 
 3. GPT family
@@ -35,18 +31,8 @@ This project is an attempt to code up the following from scratch:
    
    c. GPT-3 (reduced version &#9989;)
 
-   d. GPT-3.5 (&#8987;)
-   
-   e. Chat-GPT (&#8987;)
 
-
-4. BLOOM
-
-   a. ALIBI mask (&#8987;)
-
-   b. Architecture  (&#9989;)
-
-
+The default hyperparameters for the GPT family are as tabulated below:
 
 | Property                 | GPT-1       | GPT-2       | GPT-3       |
 |--------------------------|-------------|-------------|-------------|
@@ -73,7 +59,7 @@ The structure of the repo is as such:
 └── scripts
     ├── architectures.py
     ├── attention.py
-    ├── llms.py (formerly gpt.py)
+    ├── llms.py
     └── tests.py
 ```
 
@@ -97,39 +83,16 @@ Reduced version &#9989;
 <p align="center">Image Credit: <a href="https://dugas.ch/artificial_curiosity/GPT_architecture.html">Dugas' blog</a></p>
 
 ---
-
-***GPT-3.5***
-&#8987;
-
----
-***ChatGPT***
-&#8987;
-
----
-***BLOOM***
-
-Reduced version &#9989;
-
-ALiBi mask &#8987;
-
-![Image](assets/BLOOM.png)
-<p align="center">BLOOM architectural design</p>
-
----
 ### Running tests
 
 ---
 
 At present, tests can be run for the:
 1. Attention (and MultiHeadAttention) implementation (`attention`)
-2. Vanilla Encoder (`encoder`)
-3. Vanilla Decoder (`decoder`)
-4. Vanilla Encoder-Decoder (`encdec`)
-5. Transformer (`transformer`)
-6. GPT-1 (`gpt1`)
-7. GPT-2 (`gpt2`)
-8. GPT-3 (reduced version. See [Note](#note)) (`gpt3`)
-9. BLOOM (reduced version) (`bloom`)
+2. Transformer (`transformer`)
+3. GPT-1 (`gpt1`)
+4. GPT-2 (`gpt2`)
+5. GPT-3 (reduced version. See [Note](#note)) (`gpt3`)
 
 The tests can be run like so:
 

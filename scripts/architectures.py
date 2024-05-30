@@ -15,10 +15,10 @@ __all__ = [
 
 
 class TransformerEncoderBlock(nn.Module):
+    """The basic block for the Encoder in the Transformer architecture."""
+
     def __init__(
         self,
-        states=None,
-        transform_states=False,
         narrow=False,
         hidden_dim=128,
         state_dim=128,
@@ -31,8 +31,6 @@ class TransformerEncoderBlock(nn.Module):
         self.pre_ln = pre_ln
 
         self.attention = MultiHeadAttention(
-            states=states,
-            transform_states=transform_states,
             narrow=narrow,
             hidden_dim=hidden_dim,
             state_dim=state_dim,
@@ -56,20 +54,27 @@ class TransformerEncoderBlock(nn.Module):
     def forward(self, x, source_mask=None):
         if self.pre_ln:
             x_ = self.layer_norm1(x)
-            x = x + self.dropout1(self.attention(key = x_, value = x_, query = x_, mask=source_mask))
+            x = x + self.dropout1(
+                self.attention(key=x_, value=x_, query=x_, mask=source_mask)
+            )
             x = x + self.dropout2(self.feed_forward(self.layer_norm2(x)))
         else:
-            x = self.layer_norm1(x + self.dropout1(self.attention(key = x, value = x, query = x, mask=source_mask)))
+            x = self.layer_norm1(
+                x
+                + self.dropout1(
+                    self.attention(key=x, value=x, query=x, mask=source_mask)
+                )
+            )
             x = self.layer_norm2(x + self.dropout2(self.feed_forward(x)))
 
         return x
 
 
 class TransformerDecoderBlock(nn.Module):
+    """The basic block for the Decoder in the Transformer architecture."""
+
     def __init__(
         self,
-        states=None,
-        transform_states=False,
         narrow=True,
         hidden_dim=128,
         state_dim=128,
@@ -86,8 +91,6 @@ class TransformerDecoderBlock(nn.Module):
 
         if not ablate:
             self.cross_attention = MultiHeadAttention(
-                states=states,
-                transform_states=transform_states,
                 narrow=narrow,
                 hidden_dim=hidden_dim,
                 state_dim=state_dim,
@@ -97,8 +100,6 @@ class TransformerDecoderBlock(nn.Module):
             self.dropout2 = nn.Dropout(dropout_rate)
 
         self.masked_attention = MultiHeadAttention(
-            states=states,
-            transform_states=transform_states,
             narrow=narrow,
             hidden_dim=hidden_dim,
             state_dim=state_dim,
@@ -134,28 +135,28 @@ class TransformerDecoderBlock(nn.Module):
                         key=encoder_states,
                         value=encoder_states,
                         query=self.layer_norm2(x),
-                        mask=source_mask
+                        mask=source_mask,
                     )
                 )
 
             x = x + self.dropout3(self.feed_forward(self.layer_norm3(x)))
         else:
             x = self.layer_norm1(
-                x + self.dropout1(
-                    self.masked_attention(
-                        key=x, value=x, query=x, mask=target_mask
-                    )
+                x
+                + self.dropout1(
+                    self.masked_attention(key=x, value=x, query=x, mask=target_mask)
                 )
             )
 
             if not self.ablate:
                 x = self.layer_norm2(
-                    x + self.dropout2(
+                    x
+                    + self.dropout2(
                         self.cross_attention(
                             key=encoder_states,
                             value=encoder_states,
                             query=x,
-                            mask=source_mask
+                            mask=source_mask,
                         )
                     )
                 )
@@ -166,11 +167,11 @@ class TransformerDecoderBlock(nn.Module):
 
 
 class TransformerEncoder(nn.Module):
+    """Encoder module for the Transformer architecture."""
+
     def __init__(
         self,
         num_encoder_blocks=4,
-        states=None,
-        transform_states=False,
         narrow=True,
         hidden_dim=128,
         state_dim=128,
@@ -181,8 +182,6 @@ class TransformerEncoder(nn.Module):
 
         self.encoder = [
             TransformerEncoderBlock(
-                states=states,
-                transform_states=transform_states,
                 narrow=narrow,
                 hidden_dim=hidden_dim,
                 state_dim=state_dim,
@@ -201,11 +200,11 @@ class TransformerEncoder(nn.Module):
 
 
 class TransformerDecoder(nn.Module):
+    """Decoder module for the Transformer architecture."""
+
     def __init__(
         self,
         num_decoder_blocks=4,
-        states=None,
-        transform_states=False,
         narrow=False,
         hidden_dim=128,
         state_dim=128,
@@ -217,8 +216,6 @@ class TransformerDecoder(nn.Module):
 
         self.decoder = [
             TransformerDecoderBlock(
-                states=states,
-                transform_states=transform_states,
                 narrow=narrow,
                 hidden_dim=hidden_dim,
                 state_dim=state_dim,
@@ -241,12 +238,12 @@ class TransformerDecoder(nn.Module):
 
 
 class Transformer(nn.Module):
+    """Class definition for the Transformer architecture."""
+
     def __init__(
         self,
         num_encoder_blocks=4,
         num_decoder_blocks=4,
-        states=None,
-        transform_states=False,
         narrow=True,
         hidden_dim=128,
         state_dim=128,
@@ -261,8 +258,6 @@ class Transformer(nn.Module):
 
         if not self.decoder_only:
             self.encoder = TransformerEncoder(
-                states=states,
-                transform_states=transform_states,
                 narrow=narrow,
                 hidden_dim=hidden_dim,
                 state_dim=state_dim,
@@ -272,8 +267,6 @@ class Transformer(nn.Module):
             )
 
         self.decoder = TransformerDecoder(
-            states=states,
-            transform_states=transform_states,
             narrow=narrow,
             hidden_dim=hidden_dim,
             state_dim=state_dim,
@@ -293,31 +286,33 @@ class Transformer(nn.Module):
 
         return x_decoder
 
-#
-# if __name__ == "__main__":
-#
-#     narrow = True
-#     hidden_dim = 128
-#     state_dim = 128
-#     num_heads = 32
-#     decoder_only = False
-#     ablate = False
-#     pre_ln = True
-#
-#     batch_size = 32
-#     seq_len = 10
-#
-#     attn = Transformer(
-#         narrow=narrow,
-#         hidden_dim=hidden_dim,
-#         state_dim=state_dim,
-#         num_heads=num_heads,
-#         decoder_only=decoder_only,
-#         ablate=ablate,
-#         pre_ln=pre_ln
-#     )
-#
-#     x = torch.randn(batch_size, seq_len, state_dim)
-#
-#     out = attn(x, x)
-#     print(out.shape)
+
+if __name__ == "__main__":
+    from torchinfo import summary
+
+    narrow = True
+    hidden_dim = 128
+    state_dim = 128
+    num_heads = 32
+    decoder_only = False
+    ablate = False
+    pre_ln = True
+
+    batch_size = 32
+    seq_len = 10
+
+    attn = Transformer(
+        narrow=narrow,
+        hidden_dim=hidden_dim,
+        state_dim=state_dim,
+        num_heads=num_heads,
+        decoder_only=decoder_only,
+        ablate=ablate,
+        pre_ln=pre_ln,
+    )
+
+    x = torch.randn(batch_size, seq_len, state_dim)
+
+    out = attn(x, x)
+    print(out.shape)
+    summary(attn, input_data=[x, x])

@@ -6,14 +6,11 @@ import torch
 from attention import MultiHeadAttention
 
 from architectures import (
-    Decoder,
-    Encoder,
-    EncoderDecoder,
     Transformer,
     TransformerDecoder,
     TransformerEncoder,
 )
-from llms import GPT, BLOOM
+from llms import GPT
 
 from torchinfo import summary
 
@@ -21,30 +18,22 @@ from torchinfo import summary
 tests = [
     "all",
     "attention",
-    "encoder",
     "transencoder",
-    "decoder",
     "transdecoder",
-    "encdec",
     "transformer",
     "gpt1",
     "gpt2",
     "gpt3",
-    "bloom",
 ]
 
 test_names = [
     "Attention modules",
-    "Encoder architecture",
     "Transformer-based Encoder architecture",
-    "Decoder architecture",
     "Transformer-based Decoder architecture",
-    "Encoder-Decoder architecture",
     "Transformer architecture",
     "GPT-1 architecture",
     "GPT-2 architecture",
     "GPT-3 architecture",
-    "BLOOM architecture",
 ]
 
 test_map = {k: v for (k, v) in zip(tests[1:], test_names)}
@@ -63,25 +52,7 @@ def run_tests(test_to_run=None, device="cpu"):
 
     torch.cuda.empty_cache()
 
-    if test_to_run == "encoder":
-        print("Testing Encoder\n")
-
-        attn = Encoder(
-            num_heads=num_heads,
-            narrow=narrow,
-            transform_states=transform_states,
-            hidden_dim=hidden_dim,
-        ).to(device)
-
-        ans = attn(query)
-
-        print(summary(attn, input_data=query, device=device))
-
-        # print("Attention scores shape: ", attn.attention_scores.shape)
-        print("Query shape: ", query.shape, end="\n\n")
-        print("Encoder states shape: ", ans.shape, end="\n\n")
-
-    elif test_to_run == "transencoder":
+    if test_to_run == "transencoder":
         print("Testing Transformer Encoder\n")
 
         attn = TransformerEncoder(
@@ -134,37 +105,6 @@ def run_tests(test_to_run=None, device="cpu"):
         print("Attention scores shape: ", attn.attention_scores.shape)
         print("Context vector shape: ", ans.shape, end="\n\n")
 
-    elif test_to_run == "decoder":
-        print("Testing Decoder\n")
-
-        prob = torch.randint(low=0, high=11, size=(1,)) / 10
-
-        if prob >= 0.5:
-            transform_states = [
-                np.random.choice([True, False]) for _ in range(num_heads)
-            ]
-        else:
-            inner_prob = np.random.randint(low=0, high=11, size=(1,)) / 10
-            if inner_prob >= 0.5:
-                transform_states = True
-            else:
-                transform_states = False
-
-        attn = Decoder(
-            num_heads=num_heads,
-            transform_states=transform_states,
-            narrow=narrow,
-            hidden_dim=hidden_dim,
-        ).to(device)
-
-        attn.set_states(states=x, cross=True)
-
-        ans = attn(x=query)
-
-        print(summary(attn, input_data=query, device=device))
-
-        print("Decoder predictions shape: ", ans.shape, end="\n\n")
-
     elif test_to_run == "transdecoder":
         print("Testing Transformer Decoder\n")
 
@@ -195,45 +135,6 @@ def run_tests(test_to_run=None, device="cpu"):
 
         print("Transformer Decoder predictions shape: ", ans.shape, end="\n\n")
 
-    elif test_to_run == "encdec":
-        print("Testing Encoder-Decoder architecture\n")
-
-        prob = torch.randint(low=0, high=11, size=(1,)) / 10
-
-        if prob >= 0.5:
-            transform_states = [
-                np.random.choice([True, False]) for _ in range(num_heads)
-            ]
-        else:
-            inner_prob = np.random.randint(low=0, high=11, size=(1,)) / 10
-            if inner_prob >= 0.5:
-                transform_states = True
-            else:
-                transform_states = False
-
-        enc = Encoder(
-            num_heads=num_heads,
-            transform_states=transform_states,
-            narrow=narrow,
-            hidden_dim=hidden_dim,
-        ).to(device)
-        dec = Decoder(
-            num_heads=num_heads,
-            transform_states=transform_states,
-            narrow=narrow,
-            hidden_dim=hidden_dim,
-        ).to(device)
-
-        attn = EncoderDecoder(encoder=enc, decoder=dec)
-
-        ans = attn(x, query)
-
-        print(summary(attn, input_data=[x, query], device=device))
-
-        print("Encoder input shape: ", x.shape)
-        print("Decoder input shape: ", query.shape)
-        print("Decoder prediction shape: ", ans.shape, end="\n\n")
-
     elif test_to_run == "transformer":
         prob = torch.randn(size=(1,))
 
@@ -253,7 +154,7 @@ def run_tests(test_to_run=None, device="cpu"):
             pre_ln=pre_ln,
         ).to(device)
 
-        ans = transformer(x, query)
+        ans = transformer(x_encoder=x, x_decoder=query)
 
         print(
             summary(
@@ -273,8 +174,12 @@ def run_tests(test_to_run=None, device="cpu"):
         print("`decoder_only` : ", decoder_only)
         print("`transform_states`: ", transform_states)
 
-    elif test_to_run in ["gpt1", "gpt2", "gpt3", "bloom"]:
-        model = GPT
+    elif test_to_run in [
+        "gpt1",
+        "gpt2",
+        "gpt3",
+    ]:
+        model_constructor = GPT
         if test_to_run == "gpt1":
             num_encoder_embeddings = 50257
             max_token = 1024
@@ -296,14 +201,6 @@ def run_tests(test_to_run=None, device="cpu"):
             num_heads = 12
             num_blocks = int(96 / 3)
             embedding_dim = int(12288 / 3)
-        elif test_to_run == "bloom":
-            num_encoder_embeddings = 250680
-            max_token = 2048
-            narrow = True
-            num_heads = 16
-            num_blocks = 24
-            embedding_dim = 1024
-            model = BLOOM
 
         # Generate batch of sequences
         num_sequences = 2  # Batch size
@@ -317,7 +214,7 @@ def run_tests(test_to_run=None, device="cpu"):
             ),
         ).to(device)
 
-        llm = model(
+        model = model_constructor(
             transform_states=transform_states,
             num_heads=num_heads,
             num_decoder_blocks=num_blocks,
@@ -329,11 +226,11 @@ def run_tests(test_to_run=None, device="cpu"):
             pre_ln=pre_ln,
         ).to(device)
 
-        ans = torch.sum(llm(x), dim=1)
+        ans = torch.sum(model(x), dim=1)
 
         print(
             summary(
-                llm,
+                model,
                 input_data=x,
                 depth=6,
                 batch_dim=None,
