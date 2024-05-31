@@ -5,6 +5,7 @@ from torch import nn
 
 __all__ = [
     "TokenEmbedder",
+    "PositionalEncoding",
     "EmbeddingSystem",
 ]
 
@@ -28,23 +29,22 @@ class PositionalEncoding(nn.Module):
         self.hidden_dim = hidden_dim
 
         position = torch.arange(max_length).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, hidden_dim, 2) * (-torch.log(torch.tensor([10000.0])) / hidden_dim))
+        div_term = torch.exp(
+            torch.arange(0, hidden_dim, 2)
+            * (-torch.log(torch.tensor([10000.0])) / hidden_dim)
+        )
 
         pos_encoding = torch.zeros(max_length, hidden_dim)
-
-        print(pos_encoding.shape)
-        print(torch.sin(position * div_term).shape)
 
         pos_encoding[:, 0::2] = torch.sin(position * div_term)
         pos_encoding[:, 1::2] = torch.cos(position * div_term)
 
-        self.register_buffer('pos_encoding', pos_encoding.unsqueeze(0))
+        self.register_buffer("pos_encoding", pos_encoding.unsqueeze(0))
 
-        self.dropout = nn.Dropout1d(p = .3)
+        self.dropout = nn.Dropout1d(p=0.3)
 
     def forward(self, x):
-        print("POS shape", self.pos_encoding[:, :x.size(1), :].shape)
-        return self.dropout(x + self.pos_encoding[:, :x.size(1), :])
+        return self.dropout(x + self.pos_encoding[:, : x.size(1), :])
 
 
 class EmbeddingSystem(nn.Module):
@@ -58,8 +58,7 @@ class EmbeddingSystem(nn.Module):
         super().__init__()
         self.encoder_embedding = TokenEmbedder(num_text_embeddings, text_embedding_dim)
         self.encoder_pos_embedding = PositionalEncoding(
-            max_length=num_pos_embeddings,
-            hidden_dim=pos_embedding_dim
+            max_length=num_pos_embeddings, hidden_dim=pos_embedding_dim
         )
 
     def forward(self, x):
@@ -69,8 +68,5 @@ class EmbeddingSystem(nn.Module):
             x = x[..., :num_pos_embeddings]
 
         x = self.encoder_embedding(x)
-        print(x.shape)
-        x = self.encoder_pos_embedding(
-            x
-        )
+        x = self.encoder_pos_embedding(x)
         return x

@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import Dataset
 from torch import nn
 
-from tokenizers import Tokenizer, AddedToken
+from tokenizers import Tokenizer
 from tokenizers.models import BPE
 
 from tokenizers.decoders import ByteLevel as ByteLevelDecoder
@@ -15,7 +15,6 @@ from tokenizers.normalizers import Sequence, Lowercase
 from tokenizers.pre_tokenizers import ByteLevel
 from tokenizers.trainers import BpeTrainer
 
-from transformers import GPT2TokenizerFast, GPT2Tokenizer
 
 __all__ = ["DataTokenizer", "DataProcessor", "DataProcessorv2", "FelaDataset"]
 
@@ -50,7 +49,7 @@ class DataTokenizer:
             self.file_paths = [file_paths]
 
         if special_tokens is None:
-            special_tokens = ["<s>", "<pad>", "</s>", "<unk>", "<mask>"]
+            special_tokens = ["<s>", "</s>", "<pad>", "<unk>", "<mask>"]
 
         self.special_tokens = special_tokens
         self.max_length = max_length
@@ -100,7 +99,9 @@ class DataTokenizer:
         return self.decode(encodings.ids, **kwargs)
 
     @classmethod
-    def from_pretrained(cls, path):
+    def from_pretrained(cls, tokenizer_name):
+        tokenizer_name = tokenizer_name + ".json" if not tokenizer_name.endswith(".json") else tokenizer_name
+        path = f"../artefacts/tokenizers/{tokenizer_name}"
         tokenizer = cls(file_paths=None, tokenizer=Tokenizer.from_file(path))
         return tokenizer
 
@@ -132,17 +133,18 @@ class DataProcessor:
 
 
 class DataProcessorv2:
-    def __init__(
-        self,
-        tokenizer_path,
-        vocab_size=50000,
-    ):
+    def __init__(self, tokenizer_name, vocab_size=50000, min_length=20):
         self.vocab_size = vocab_size
-        self.tokenizer_path = tokenizer_path
-        self.tokenizer = DataTokenizer.from_pretrained(tokenizer_path)
+        self.tokenizer_path = tokenizer_name
+
+        self.min_length = min_length
+
+        self.tokenizer = DataTokenizer.from_pretrained(tokenizer_name)
+        self.tokenized_content = None
+        self.num_tokens = None
 
     def get_vocab_size(self):
-        return self.tokenizer.vocab_size
+        return self.tokenizer.tokenizer.get_vocab_size()
 
     def process_file(self, file_path, time_steps=100, **kwargs):
         with open(file_path, "r", encoding="utf-8") as f:
@@ -158,36 +160,64 @@ class DataProcessorv2:
         self.num_tokens = num_tokens
 
         data_samples = [
-            tokenized_content[i : i + time_steps]
-            for i in range(0, num_tokens)
+            tokenized_content[i : i + time_steps] for i in range(0, num_tokens)
         ]
         pad_id = self.tokenizer.special_tokens.index("<pad>")
-        data_samples[-1] = data_samples[-1] + [pad_id for _ in range(time_steps - len(data_samples[-1] ))]
+        data_samples[-1] = data_samples[-1] + [
+            pad_id for _ in range(time_steps - len(data_samples[-1]))
+        ]
 
-        data_samples = self.offset_augmentation(data_samples, time_steps = time_steps, offset_ratios = None)
-        data_samples = self.overlap_augmentation(data_samples, time_steps=time_steps, overlap_ratios=None)
+        data_samples = self.offset_augmentation(
+            data_samples, time_steps=time_steps, offset_ratios=None
+        )
+        data_samples = self.overlap_augmentation(
+            data_samples, time_steps=time_steps, overlap_ratios=None
+        )
 
+        data_samples = self.filter_data(data_samples, min_length=self.min_length)
+        data_samples = [
+            (
+                sample
+                if len(sample) == time_steps
+                else sample + [pad_id for _ in range(time_steps - len(sample))]
+            )
+            for sample in data_samples
+        ]
         return data_samples
 
-    def offset_augmentation(self, data_samples, time_steps = 100, offset_ratios = None):
+    def offset_augmentation(self, data_samples, time_steps=100, offset_ratios=None):
         if offset_ratios is None:
-            offset_ratios = [.2, .3, .4, .5, .6, .7, .8]
+            offset_ratios = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 
         for offset_ratio in offset_ratios:
             start_index = int(self.num_tokens * offset_ratio)
 
+            pad_id = self.tokenizer.special_tokens.index("<pad>")
+
             offset_data_samples = [
-                self.tokenized_content[i: i + time_steps]
+                (
+                    self.tokenized_content[i : i + time_steps]
+                    if len(self.tokenized_content[i : i + time_steps]) == time_steps
+                    else self.tokenized_content[i : i + time_steps]
+                    + [
+                        pad_id
+                        for _ in range(
+                            time_steps - len(self.tokenized_content[i : i + time_steps])
+                        )
+                    ]
+                )
                 for i in range(start_index, self.num_tokens)
             ]
 
             data_samples.extend(offset_data_samples)
 
+        print("Data samples generated!")
+
         return data_samples
 
-    def overlap_augmentation(self, data_samples, time_steps = 100, overlap_ratios = None):
+    def overlap_augmentation(self, data_samples, time_steps=100, overlap_ratios=None):
         if overlap_ratios is None:
-            overlap_ratios = [.2, .3, .4, .5, .6, .7, .8]
+            overlap_ratios = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 
         for overlap_ratio in overlap_ratios:
             start_index = int(time_steps * overlap_ratio)
@@ -197,19 +227,21 @@ class DataProcessorv2:
             overlap_data_samples = []
 
             while still_overlapping:
-                overlap_index = torch.randint(low=0, high=start_index, size = (1,)).item()
+                overlap_index = torch.randint(low=0, high=start_index, size=(1,)).item()
 
                 start_overlap_index = i if i == 0 else i - overlap_index
                 end_overlap_index = start_overlap_index + time_steps
 
-                print(f"Starting at: {start_overlap_index}")
+                # print(f"Starting at: {start_overlap_index}")
 
                 if end_overlap_index >= self.num_tokens:
-                    print(f"End index: {end_overlap_index} greater than token number: {self.num_tokens}")
+                    # print(
+                    #     f"End index: {end_overlap_index} greater than token number: {self.num_tokens}"
+                    # )
                     still_overlapping = False
                     end_overlap_index = self.num_tokens - 1
 
-                sample = self.tokenized_content[start_overlap_index: end_overlap_index]
+                sample = self.tokenized_content[start_overlap_index:end_overlap_index]
 
                 if len(sample) < time_steps:
                     pad_id = self.tokenizer.special_tokens.index("<pad>")
@@ -221,6 +253,11 @@ class DataProcessorv2:
             data_samples.extend(overlap_data_samples)
 
         return data_samples
+
+    @staticmethod
+    def filter_data(data_samples, min_length=20):
+        data_samples = filter(lambda x: len(x) >= min_length, data_samples)
+        return list(data_samples)
 
 
 class FelaDataset(Dataset):
@@ -277,22 +314,26 @@ if __name__ == "__main__":
 
     dataset = FelaDataset(
         data_path=file_paths[0],
-        tokenizer_path="../artefacts/tokenizers/works_of_fela.json"
+        tokenizer_path="../artefacts/tokenizers/works_of_fela.json",
     )
 
-    data, label = dataset[len(dataset)-1]
+    data, label = dataset[len(dataset) - 1]
 
     print("=" * 50, "Data")
 
     print(dataset.data_processor.tokenizer.decode(data))
 
-    print("="*50, "Label")
+    print("=" * 50, "Label")
     print(dataset.data_processor.tokenizer.decode(label))
     print("=" * 50)
 
     token_population = len(dataset) * 100
 
     factor = 3
+    batch_size = 32
 
     print("Total number of tokens for training:", token_population)
-    print("Total number of matching model parameters:", int(token_population/factor))
+    print("Total number of matching model parameters:", int(token_population / factor))
+    print("Number of batches with batch size of", batch_size, ":", len(dataset)//batch_size)
+
+

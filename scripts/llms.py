@@ -9,6 +9,8 @@ from encoding import EmbeddingSystem
 __all__ = [
     "GPT",
     "GPTHead",
+    "GPTPretrainedHead",
+    "PretrainedGPT",
 ]
 
 
@@ -82,6 +84,63 @@ class GPTHead(nn.Module):
         x = self.decoder_head(x)
 
         return x
+
+
+class GPTPretrainedHead(nn.Module):
+    """Class definition for the Generative Pretrained Model II (GPT-2) pretraining head"""
+
+    def __init__(self, hidden_dim=128, output_dim=100):
+        super(GPTPretrainedHead, self).__init__()
+
+        self.decoder_head = nn.Sequential(
+            nn.Linear(
+                in_features=hidden_dim, out_features=int(hidden_dim * 4), bias=True
+            ),
+            nn.ReLU(),
+            nn.Linear(
+                in_features=int(hidden_dim * 4), out_features=output_dim, bias=True
+            ),
+        )
+
+    def forward(self, x):
+        x = self.decoder_head(x)
+        return x
+
+
+class PretrainedGPT(nn.Module):
+    """Class definition for the Generative Pretrained Model II (GPT-2) backbone."""
+
+    def __init__(
+        self,
+        num_heads=96,
+        num_embeddings=50257,
+        max_token=2048,
+        embedding_dim=12288,
+        num_decoder_blocks=96,
+        narrow=True,
+        pre_ln=False,
+        ablate=True,
+    ):
+        super().__init__()
+
+        self.gpt_stem = GPT(
+            num_heads=num_heads,
+            num_embeddings=num_embeddings,
+            max_token=max_token,
+            embedding_dim=embedding_dim,
+            num_decoder_blocks=num_decoder_blocks,
+            narrow=narrow,
+            pre_ln=pre_ln,
+            ablate=ablate,
+        )
+
+        self.pretrained_head = GPTPretrainedHead(
+            hidden_dim=embedding_dim, output_dim=num_embeddings
+        )
+
+    def forward(self, x):
+        x = self.gpt_stem(x)
+        return self.pretrained_head(x)
 
 
 if __name__ == "__main__":
