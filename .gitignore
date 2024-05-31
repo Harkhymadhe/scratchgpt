@@ -6,3 +6,4 @@ scripts/io.py
 scripts/text.txt
 scripts/scrap.py
 /datasets
+/artefacts
