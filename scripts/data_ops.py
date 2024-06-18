@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 
 import torch
 from torch.utils.data import Dataset
-from torch import nn
 
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
@@ -15,18 +15,19 @@ from tokenizers.normalizers import Sequence, Lowercase
 from tokenizers.pre_tokenizers import ByteLevel
 from tokenizers.trainers import BpeTrainer
 
-
-__all__ = ["DataTokenizer", "DataProcessor", "DataProcessorv2", "FelaDataset"]
+__all__ = ["DataTokenizer", "DataProcessor", "DataProcessorv2", "TextDataset"]
 
 
 class DataTokenizer:
     def __init__(
         self,
-        file_paths,
+        file_names,
         tokenizer=None,
         vocab_size=50000,
         max_length=1024,
         special_tokens=None,
+        enable_padding=False,
+        enable_truncation=False,
     ):
 
         if tokenizer is not None:
@@ -43,28 +44,32 @@ class DataTokenizer:
 
         self.vocab_size = vocab_size
 
-        if isinstance(file_paths, (list, tuple, set)) or file_paths is None:
-            self.file_paths = file_paths
+        if isinstance(file_names, (list, tuple, set)) or file_names is None:
+            self.file_names = file_names
         else:
-            self.file_paths = [file_paths]
+            self.file_names = [file_names]
 
         if special_tokens is None:
             special_tokens = ["<s>", "</s>", "<pad>", "<unk>", "<mask>"]
 
         self.special_tokens = special_tokens
         self.max_length = max_length
+        self.enable_padding = enable_padding
+        self.enable_truncation = enable_truncation
 
-        self.tokenizer.enable_padding(
-            direction="right",
-            pad_token="<pad>",
-            pad_id=self.special_tokens.index("<pad>"),
-            length=self.max_length,
-        )
+        if enable_padding:
+            self.tokenizer.enable_padding(
+                direction="right",
+                pad_token="<pad>",
+                pad_id=self.special_tokens.index("<pad>"),
+                length=self.max_length,
+            )
 
-        # self.tokenizer.enable_truncation(
-        #     direction="right",
-        #     max_length=self.max_length,
-        # )
+        if enable_truncation:
+            self.tokenizer.enable_truncation(
+                direction="right",
+                max_length=self.max_length,
+            )
 
         self.trainer = BpeTrainer(
             vocab_size=self.vocab_size,
@@ -72,24 +77,34 @@ class DataTokenizer:
             special_tokens=special_tokens,
         )
 
-    def train_tokenizer(self, file_path):
-        self.tokenizer.train([file_path], self.trainer)
+    def train_tokenizer(self, file_name):
+        raw_file_path = os.path.join("../datasets/raw", file_name)
+        preprocessed_file_path = os.path.join("../datasets/preprocessed", file_name)
+
+        # Preprocess text file
+        self.preprocess_file(
+            raw_file_path=raw_file_path, preprocessed_file_path=preprocessed_file_path
+        )
+
+        self.tokenizer.train([preprocessed_file_path], self.trainer)
         self.tokenizer.save(
-            f"../artefacts/tokenizers/{os.path.splitext(file_path)[0].split('/')[-1]}.json"
+            f"../artefacts/tokenizers/{os.path.splitext(preprocessed_file_path)[0].split('/')[-1]}.json"
         )
         return
 
-    def train_tokenizers(self, file_paths=None):
-        if file_paths is None:
-            file_paths = self.file_paths
+    def train_tokenizers(self, file_names=None):
+        if file_names is None:
+            file_names = self.file_names
 
-        for file_path in file_paths:
-            self.train_tokenizer(file_path)
+        for file_name in file_names:
+            self.train_tokenizer(file_name)
 
         return
 
     def decode(self, ids, **kwargs):
-        return self.tokenizer.decode(ids=ids, **kwargs)
+        return self.tokenizer.decode(
+            ids=ids if isinstance(ids, list) else ids.numpy().tolist(), **kwargs
+        )
 
     def encode(self, sequence, **kwargs):
         return self.tokenizer.encode(sequence=sequence, **kwargs)
@@ -100,10 +115,37 @@ class DataTokenizer:
 
     @classmethod
     def from_pretrained(cls, tokenizer_name):
-        tokenizer_name = tokenizer_name + ".json" if not tokenizer_name.endswith(".json") else tokenizer_name
+        tokenizer_name = (
+            tokenizer_name + ".json"
+            if not tokenizer_name.endswith(".json")
+            else tokenizer_name
+        )
         path = f"../artefacts/tokenizers/{tokenizer_name}"
-        tokenizer = cls(file_paths=None, tokenizer=Tokenizer.from_file(path))
+        tokenizer = cls(file_names=None, tokenizer=Tokenizer.from_file(path))
         return tokenizer
+
+    @classmethod
+    def preprocess_file(cls, raw_file_path, preprocessed_file_path, eos_token="</s>"):
+        with open(raw_file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        lines = list(filter(lambda x: "※" not in x, lines))
+
+        # re.findall(r"\s*[\*\s]*", line)
+        lines = [
+            (
+                eos_token
+                if len(list(set(re.sub("\s*", "", line)))) > 0
+                and list(set(re.sub("\s*", "", line)))[0] in ["_", "*"]
+                else line
+            )
+            for line in lines
+        ]
+
+        with open(preprocessed_file_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
+        return
 
 
 class DataProcessor:
@@ -121,7 +163,7 @@ class DataProcessor:
             content = f.readlines()
 
         # content = [c.strip() for c in content]
-        merged_content = " ".join(content)
+        merged_content = "".join(content)
         tokenized_content = self.tokenizer.encode(merged_content, **kwargs)
 
         # sample_len = 100
@@ -133,7 +175,9 @@ class DataProcessor:
 
 
 class DataProcessorv2:
-    def __init__(self, tokenizer_name, vocab_size=50000, min_length=20):
+    def __init__(
+        self, tokenizer_name, vocab_size=50000, min_length=20, augment_data=False
+    ):
         self.vocab_size = vocab_size
         self.tokenizer_path = tokenizer_name
 
@@ -143,12 +187,19 @@ class DataProcessorv2:
         self.tokenized_content = None
         self.num_tokens = None
 
+        self.enable_padding = self.tokenizer.enable_padding
+        self.enable_truncation = self.tokenizer.enable_truncation
+        self.augment_data = augment_data
+
     def get_vocab_size(self):
         return self.tokenizer.tokenizer.get_vocab_size()
 
     def process_file(self, file_path, time_steps=100, **kwargs):
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.readlines()
+
+        # Filter out lines linking to the website the Fela data was obtained from
+        content = list(filter(lambda x: "※" not in x, content))
 
         # content = [c.strip() for c in content]
         content = " ".join(content)
@@ -159,30 +210,40 @@ class DataProcessorv2:
         num_tokens = len(tokenized_content)
         self.num_tokens = num_tokens
 
-        data_samples = [
-            tokenized_content[i : i + time_steps] for i in range(0, num_tokens)
-        ]
         pad_id = self.tokenizer.special_tokens.index("<pad>")
-        data_samples[-1] = data_samples[-1] + [
-            pad_id for _ in range(time_steps - len(data_samples[-1]))
-        ]
 
-        data_samples = self.offset_augmentation(
-            data_samples, time_steps=time_steps, offset_ratios=None
-        )
-        data_samples = self.overlap_augmentation(
-            data_samples, time_steps=time_steps, overlap_ratios=None
-        )
-
-        data_samples = self.filter_data(data_samples, min_length=self.min_length)
         data_samples = [
             (
-                sample
-                if len(sample) == time_steps
-                else sample + [pad_id for _ in range(time_steps - len(sample))]
+                tokenized_content[i : i + time_steps + 1]
+                if len(tokenized_content[i : i + time_steps + 1]) == time_steps + 1
+                else tokenized_content[i : i + time_steps + 1]
+                + [
+                    pad_id
+                    for _ in range(
+                        time_steps + 1 - len(tokenized_content[i : i + time_steps + 1])
+                    )
+                ]
             )
-            for sample in data_samples
+            for i in range(0, num_tokens)
         ]
+
+        if self.augment_data:
+            data_samples = self.offset_augmentation(
+                data_samples, time_steps=time_steps, offset_ratios=None
+            )
+            data_samples = self.overlap_augmentation(
+                data_samples, time_steps=time_steps, overlap_ratios=None
+            )
+
+        data_samples = self.filter_data(data_samples, min_length=self.min_length)
+        # data_samples = [
+        #     (
+        #         sample
+        #         if len(sample) == time_steps
+        #         else sample + [pad_id for _ in range(time_steps - len(sample))]
+        #     )
+        #     for sample in data_samples
+        # ]
         return data_samples
 
     def offset_augmentation(self, data_samples, time_steps=100, offset_ratios=None):
@@ -196,13 +257,16 @@ class DataProcessorv2:
 
             offset_data_samples = [
                 (
-                    self.tokenized_content[i : i + time_steps]
-                    if len(self.tokenized_content[i : i + time_steps]) == time_steps
-                    else self.tokenized_content[i : i + time_steps]
+                    self.tokenized_content[i : i + time_steps + 1]
+                    if len(self.tokenized_content[i : i + time_steps + 1])
+                    == time_steps + 1
+                    else self.tokenized_content[i : i + time_steps + 1]
                     + [
                         pad_id
                         for _ in range(
-                            time_steps - len(self.tokenized_content[i : i + time_steps])
+                            time_steps
+                            + 1
+                            - len(self.tokenized_content[i : i + time_steps + 1])
                         )
                     ]
                 )
@@ -230,22 +294,22 @@ class DataProcessorv2:
                 overlap_index = torch.randint(low=0, high=start_index, size=(1,)).item()
 
                 start_overlap_index = i if i == 0 else i - overlap_index
-                end_overlap_index = start_overlap_index + time_steps
-
-                # print(f"Starting at: {start_overlap_index}")
+                end_overlap_index = start_overlap_index + time_steps + 1
 
                 if end_overlap_index >= self.num_tokens:
                     # print(
                     #     f"End index: {end_overlap_index} greater than token number: {self.num_tokens}"
                     # )
                     still_overlapping = False
-                    end_overlap_index = self.num_tokens - 1
+                    end_overlap_index = self.num_tokens
 
                 sample = self.tokenized_content[start_overlap_index:end_overlap_index]
 
-                if len(sample) < time_steps:
+                if len(sample) < time_steps + 1:
                     pad_id = self.tokenizer.special_tokens.index("<pad>")
-                    sample = sample + [pad_id for _ in range(time_steps - len(sample))]
+                    sample = sample + [
+                        pad_id for _ in range(time_steps + 1 - len(sample))
+                    ]
 
                 overlap_data_samples.append(sample)
                 i = end_overlap_index
@@ -254,29 +318,52 @@ class DataProcessorv2:
 
         return data_samples
 
-    @staticmethod
-    def filter_data(data_samples, min_length=20):
-        data_samples = filter(lambda x: len(x) >= min_length, data_samples)
-        return list(data_samples)
+    def filter_data(self, data_samples, max_pad=0.0, min_length=20):
+        pad_id = self.tokenizer.special_tokens.index("<pad>")
+
+        data_samples = list(filter(lambda x: len(x) >= min_length, data_samples))
+
+        # if self.enable_padding:
+        data_samples = list(
+            filter(lambda x: x.count(pad_id) / len(x) <= max_pad, data_samples)
+        )
+
+        return data_samples
 
 
-class FelaDataset(Dataset):
+class TextDataset(Dataset):
     def __init__(
         self,
-        data_path,
+        file_name,
         tokenizer_path,
         time_steps=100,
         vocab_size=50000,
+        min_length=100,
+        frac=0.85,
+        train=None,
+        augment_data=False,
     ):
         super().__init__()
-        self.path = data_path
+        self.file_name = file_name
+        self.path = os.path.join("../datasets/preprocessed", file_name)
+        self.frac = frac
+        self.train = train
+        self.time_steps = time_steps
+        self.augment_data = augment_data
+
         self.data_processor = DataProcessorv2(
             tokenizer_path,
             vocab_size=vocab_size,
+            min_length=min_length,
+            augment_data=augment_data,
         )
         self.data = self.data_processor.process_file(
-            file_path=data_path, time_steps=time_steps
+            file_path=self.path, time_steps=time_steps
         )
+
+        if isinstance(self.train, bool):
+            end_index = int(self.frac * len(self.data))
+            self.data = self.data[:end_index] if self.train else self.data[end_index:]
 
     def __len__(self):
         return len(self.data)
@@ -284,56 +371,3 @@ class FelaDataset(Dataset):
     def __getitem__(self, index):
         data = torch.tensor(self.data[index])
         return data[:-1], data[1:]
-
-
-if __name__ == "__main__":
-    from argparse import ArgumentParser
-
-    args = ArgumentParser()
-
-    args.add_argument("--files", type=str, default=None)
-
-    args.add_argument("--vocab_size", type=int, default=50000)
-
-    args = args.parse_args()
-
-    if args.files is None:
-        file_paths = ["../datasets/works_of_fela.txt"]
-    else:
-        file_paths = args.files
-
-    tokenizer = DataTokenizer(file_paths=file_paths, vocab_size=args.vocab_size)
-    tokenizer.train_tokenizers()
-
-    print(tokenizer.tokenizer.get_vocab_size())
-    encoding = tokenizer.tokenizer.encode("No wahala, senior man.")
-    decoding = tokenizer.tokenizer.decode(encoding.ids)
-    #
-    # print(encoding.tokens)
-    # print(decoding)
-
-    dataset = FelaDataset(
-        data_path=file_paths[0],
-        tokenizer_path="../artefacts/tokenizers/works_of_fela.json",
-    )
-
-    data, label = dataset[len(dataset) - 1]
-
-    print("=" * 50, "Data")
-
-    print(dataset.data_processor.tokenizer.decode(data))
-
-    print("=" * 50, "Label")
-    print(dataset.data_processor.tokenizer.decode(label))
-    print("=" * 50)
-
-    token_population = len(dataset) * 100
-
-    factor = 3
-    batch_size = 32
-
-    print("Total number of tokens for training:", token_population)
-    print("Total number of matching model parameters:", int(token_population / factor))
-    print("Number of batches with batch size of", batch_size, ":", len(dataset)//batch_size)
-
-
