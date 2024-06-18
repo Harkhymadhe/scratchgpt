@@ -4,7 +4,7 @@ scripts/../
 scripts/__pycache__/*
 scripts/io.py
 scripts/text.txt
-scrap.py
+scripts/scrap.py
 /datasets
 /artefacts
 report.MD
