@@ -109,7 +109,7 @@ class TransformerDecoderBlock(nn.Module):
             nn.Linear(
                 in_features=hidden_dim, out_features=int(hidden_dim * 4), bias=True
             ),
-            nn.ReLU(),
+            nn.GELU(approximate="tanh"),
             nn.Linear(
                 in_features=int(hidden_dim * 4), out_features=hidden_dim, bias=True
             ),
@@ -177,6 +177,7 @@ class TransformerEncoder(nn.Module):
         state_dim=128,
         num_heads=32,
         pre_ln=False,
+        dropout_rate=0.1,
     ):
         super(TransformerEncoder, self).__init__()
 
@@ -187,6 +188,7 @@ class TransformerEncoder(nn.Module):
                 state_dim=state_dim,
                 num_heads=num_heads,
                 pre_ln=pre_ln,
+                dropout_rate=dropout_rate,
             )
             for _ in range(num_encoder_blocks)
         ]
@@ -211,6 +213,7 @@ class TransformerDecoder(nn.Module):
         num_heads=32,
         ablate=True,
         pre_ln=False,
+        dropout_rate=0.1,
     ):
         super(TransformerDecoder, self).__init__()
 
@@ -222,6 +225,7 @@ class TransformerDecoder(nn.Module):
                 num_heads=num_heads,
                 ablate=ablate,
                 pre_ln=pre_ln,
+                dropout_rate=dropout_rate,
             )
             for _ in range(num_decoder_blocks)
         ]
@@ -251,6 +255,7 @@ class Transformer(nn.Module):
         decoder_only=False,
         ablate=True,
         pre_ln=False,
+        dropout_rate=0.1,
     ):
         super(Transformer, self).__init__()
 
@@ -264,6 +269,7 @@ class Transformer(nn.Module):
                 num_heads=num_heads,
                 num_encoder_blocks=num_encoder_blocks,
                 pre_ln=pre_ln,
+                dropout_rate=dropout_rate,
             )
 
         self.decoder = TransformerDecoder(
@@ -274,6 +280,7 @@ class Transformer(nn.Module):
             num_decoder_blocks=num_decoder_blocks,
             ablate=ablate,
             pre_ln=pre_ln,
+            dropout_rate=dropout_rate,
         )
 
     def forward(self, x_encoder, x_decoder, source_mask=None, target_mask=None):
@@ -285,34 +292,3 @@ class Transformer(nn.Module):
         )
 
         return x_decoder
-
-
-if __name__ == "__main__":
-    from torchinfo import summary
-
-    narrow = True
-    hidden_dim = 128
-    state_dim = 128
-    num_heads = 32
-    decoder_only = False
-    ablate = False
-    pre_ln = True
-
-    batch_size = 32
-    seq_len = 10
-
-    attn = Transformer(
-        narrow=narrow,
-        hidden_dim=hidden_dim,
-        state_dim=state_dim,
-        num_heads=num_heads,
-        decoder_only=decoder_only,
-        ablate=ablate,
-        pre_ln=pre_ln,
-    )
-
-    x = torch.randn(batch_size, seq_len, state_dim)
-
-    out = attn(x, x)
-    print(out.shape)
-    summary(attn, input_data=[x, x])
