@@ -4,6 +4,8 @@ scripts/../
 scripts/__pycache__/*
 scripts/io.py
 scripts/text.txt
-scripts/scrap.py
+scrap.py
 /datasets
 /artefacts
+report.MD
+/.ipynb_checkpoints
