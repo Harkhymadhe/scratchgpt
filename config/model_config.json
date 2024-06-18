@@ -1,0 +1,12 @@
+{
+    "narrow": true,
+    "num_heads": 4,
+    "num_decoder_blocks": 4,
+    "num_embeddings": 4096,
+    "embedding_dim": 128,
+    "max_token": 256,
+    "pre_ln": true,
+    "share_weights": true,
+    "dropout_rate": 0.5,
+    "train_pwe": true
+}
