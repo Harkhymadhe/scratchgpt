@@ -21,6 +21,7 @@ def training_loop_with_batch(
     criterion=nn.CrossEntropyLoss(),
     device="cpu",
     use_last=True,
+    gradient_accumulation_steps=1,
 ):
     TRAIN_LOSSES, TRAIN_ACCS, TRAIN_PERPLEXITY = [], [], []
     TEST_LOSSES, TEST_ACCS, TEST_PERPLEXITY = [], [], []
@@ -31,13 +32,11 @@ def training_loop_with_batch(
 
         model.train()  # Set up training mode
 
-        for train_batch in iter(train_dataloader):
+        for i, train_batch in enumerate(iter(train_dataloader)):
             train_batch_sequences, train_batch_targets = train_batch
 
             train_batch_sequences = train_batch_sequences.to(device)
             train_batch_targets = train_batch_targets.to(device)
-
-            optimizer.zero_grad()
 
             with torch.cuda.amp.autocast(dtype=torch.bfloat16):
                 y_pred = model(train_batch_sequences)
@@ -50,16 +49,19 @@ def training_loop_with_batch(
                     train_batch_targets = train_batch_targets.flatten()
 
                     train_loss = criterion(y_pred, train_batch_targets)
+                    train_loss = train_loss / gradient_accumulation_steps  # Scale loss for gradient accumulation
 
             train_loss.backward()  # Backpropagate the loss
 
-            # Clip the gradient norms to 1.0
-            nn.utils.clip_grad_norm_(
-                parameters=model.parameters(), max_norm=1.0, foreach=True
-            )
+            if (i + 1) % gradient_accumulation_steps == 0:
+                # Clip the gradient norms to 1.0
+                nn.utils.clip_grad_norm_(
+                    parameters=model.parameters(), max_norm=1.0, foreach=True
+                )
 
-            # Take a step with the optimizer
-            optimizer.step()
+                # Take a step with the optimizer
+                optimizer.step()  # Update weights after accumulating gradients
+                optimizer.zero_grad()  # Clear accumulated gradients
 
             train_losses.append(train_loss.item())
             train_perplexity.append(torch.exp(train_loss).item())

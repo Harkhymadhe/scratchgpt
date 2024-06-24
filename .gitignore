@@ -9,3 +9,4 @@ scripts/scrap.py
 /artefacts
 report.MD
 /.ipynb_checkpoints
+/__pycache__
