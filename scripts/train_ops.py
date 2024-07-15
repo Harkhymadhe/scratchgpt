@@ -56,7 +56,7 @@ def training_loop_with_batch(
 
             train_loss.backward()  # Backpropagate the loss
 
-            if (i + 1) % gradient_accumulation_steps == 0:
+            if (step + 1) % gradient_accumulation_steps == 0:
                 # Clip the gradient norms to 1.0
                 nn.utils.clip_grad_norm_(
                     parameters=model.parameters(), max_norm=1.0, foreach=True
