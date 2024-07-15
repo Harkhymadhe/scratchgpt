@@ -12,19 +12,21 @@ __all__ = ["training_loop_with_batch"]
 
 
 def training_loop_with_batch(
-    model,
-    train_dataloader,
-    test_dataloader,
-    optimizer,
-    scheduler,
-    epochs,
-    criterion=nn.CrossEntropyLoss(),
-    device="cpu",
-    use_last=True,
-    gradient_accumulation_steps=1,
+    model: nn.Module,
+    train_dataloader: torch.utils.data.DataLoader,
+    test_dataloader: torch.utils.data.DataLoader,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+    epochs: int,
+    criterion: nn.Module = nn.CrossEntropyLoss(),
+    device: str = "cpu",
+    use_last: bool = True,
+    gradient_accumulation_steps: int = 1,
 ):
     TRAIN_LOSSES, TRAIN_ACCS, TRAIN_PERPLEXITY = [], [], []
     TEST_LOSSES, TEST_ACCS, TEST_PERPLEXITY = [], [], []
+
+    num_steps = len(iter(train_dataloader))
 
     for epoch in range(1, epochs + 1):
         train_losses, train_accs, train_perplexity = [], [], []
@@ -33,6 +35,7 @@ def training_loop_with_batch(
         model.train()  # Set up training mode
 
         for i, train_batch in enumerate(iter(train_dataloader)):
+            step = ((epoch - 1) * num_steps) + (i + 1)
             train_batch_sequences, train_batch_targets = train_batch
 
             train_batch_sequences = train_batch_sequences.to(device)
@@ -110,6 +113,7 @@ def training_loop_with_batch(
                         test_batch_targets = test_batch_targets.flatten()
 
                         test_loss = criterion(y_pred_, test_batch_targets).detach()
+                        test_loss = test_loss / gradient_accumulation_steps
 
                 test_losses.append(test_loss.item())
                 test_perplexity.append(torch.exp(test_loss).item())
@@ -134,7 +138,7 @@ def training_loop_with_batch(
             avg_test_perplexity = torch.exp(torch.tensor([avg_test_loss])).item()
 
         print(
-            f"Epoch: {epoch} | Train loss: {avg_train_loss: .3f} | Test loss: {avg_test_loss: .3f} | "
+            f"Epoch: {epoch} | Step: {step} | Train loss: {avg_train_loss: .3f} | Test loss: {avg_test_loss: .3f} | "
             f"Train perplexity: {avg_train_perplexity: .3f} | Test perplexity: {avg_test_perplexity: .3f} | ",
             f"Train accuracy: {100 * avg_train_acc: .3f} % | Test accuracy: {100 * avg_test_acc: .3f} % |\n",
         )

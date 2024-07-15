@@ -43,7 +43,6 @@ def run_tests(test_to_run=None, device="cpu"):
     hidden_dim = 160
     num_heads = 5
     narrow = True
-    transform_states = True
     pre_ln = True
     ablate = True
 
@@ -58,7 +57,6 @@ def run_tests(test_to_run=None, device="cpu"):
         attn = TransformerEncoder(
             num_heads=num_heads,
             narrow=narrow,
-            transform_states=transform_states,
             hidden_dim=hidden_dim,
             state_dim=hidden_dim,
         ).to(device)
@@ -74,31 +72,14 @@ def run_tests(test_to_run=None, device="cpu"):
     elif test_to_run == "attention":
         print("Testing attention...\n")
 
-        prob = torch.randint(low=0, high=11, size=(1,)) / 10
-
-        if prob >= 0.5:
-            transform_states = [
-                np.random.choice([True, False]) for _ in range(num_heads)
-            ]
-        else:
-            inner_prob = torch.randint(low=0, high=11, size=(1,)) / 10
-            if inner_prob >= 0.5:
-                transform_states = True
-            else:
-                transform_states = False
-
         attn = MultiHeadAttention(
             num_heads=num_heads,
-            transform_states=transform_states,
             hidden_dim=hidden_dim,
             state_dim=hidden_dim,
             narrow=narrow,
-            states=x,
         ).to(device)
 
         ans = attn(query)
-
-        attn.get_attention_scores()
 
         print(summary(attn, input_data=query, device=device))
 
@@ -108,22 +89,8 @@ def run_tests(test_to_run=None, device="cpu"):
     elif test_to_run == "transdecoder":
         print("Testing Transformer Decoder\n")
 
-        prob = torch.randint(low=0, high=11, size=(1,)) / 10
-
-        if prob >= 0.5:
-            transform_states = [
-                np.random.choice([True, False]) for _ in range(num_heads)
-            ]
-        else:
-            inner_prob = np.random.randint(low=0, high=11, size=(1,)) / 10
-            if inner_prob >= 0.5:
-                transform_states = True
-            else:
-                transform_states = False
-
         attn = TransformerDecoder(
             num_heads=num_heads,
-            transform_states=transform_states,
             narrow=narrow,
             hidden_dim=hidden_dim,
             state_dim=hidden_dim,
@@ -146,7 +113,6 @@ def run_tests(test_to_run=None, device="cpu"):
             decoder_only = True
 
         transformer = Transformer(
-            transform_states=transform_states,
             narrow=narrow,
             hidden_dim=hidden_dim,
             state_dim=hidden_dim,
@@ -172,7 +138,6 @@ def run_tests(test_to_run=None, device="cpu"):
         print("=======================================")
         print("Transformer output shape: ", ans.shape)
         print("`decoder_only` : ", decoder_only)
-        print("`transform_states`: ", transform_states)
 
     elif test_to_run in [
         "gpt1",
@@ -210,19 +175,17 @@ def run_tests(test_to_run=None, device="cpu"):
             high=num_encoder_embeddings,
             size=(
                 num_sequences,
-                num_tokens,
+                max_token,
             ),
         ).to(device)
 
         model = model_constructor(
-            transform_states=transform_states,
             num_heads=num_heads,
             num_decoder_blocks=num_blocks,
             embedding_dim=embedding_dim,
             num_embeddings=num_encoder_embeddings,
             max_token=max_token,
             narrow=narrow,
-            ablate=False,
             pre_ln=pre_ln,
         ).to(device)
 

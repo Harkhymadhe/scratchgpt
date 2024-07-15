@@ -14,6 +14,8 @@ __all__ = [
 
 
 def load_state_dicts(timestamp, subfolder=1, tokenizer_path="works_of_fela.json"):
+    """Load the trained model for use."""
+
     folder = f"../artefacts/models/{timestamp}/{subfolder}"
     file_paths = [os.path.join(folder, f) for f in os.listdir(folder)]
     file_paths.sort()
@@ -46,6 +48,8 @@ def load_state_dicts(timestamp, subfolder=1, tokenizer_path="works_of_fela.json"
 
 
 def generate_predictions(tokens, model, last_timestep=True):
+    """Generate predictions given the input tokens and the model."""
+
     model.eval()
 
     # Obtain model predictions and extract the embeddings at the last timestep
@@ -179,8 +183,8 @@ def generate_text(
 
 
 if __name__ == "__main__":
-    timestamp = "20240614"
-    subfolder = 2
+    timestamp = "20240709"
+    subfolder = 1
 
     model, tokenizer = load_state_dicts(timestamp=timestamp, subfolder=subfolder)
 
@@ -191,15 +195,10 @@ if __name__ == "__main__":
         "Who send you, I neva know o"
     )
     test_sequence_d = "Please generate some songs by Fela:"
-    test_sequence_e = """Them go dabaru everything
-Them go turn green into white
-Them go turn red into blue
-Water dey go, water dey come
-Water dey go, water dey come
-Them go turn electric to candle
-Them go turn electric to candle
-Government magic
-Government magic"""
+    test_sequence_e = """Them go dabaru everything\nThem go turn green into white\nThem go turn red into blue
+    "\nWater dey go, water dey come"
+    "Water dey go, water dey come\nThem go turn electric to candle\n"
+    "Them go turn electric to candle\nGovernment magic\nGovernment magic"""
 
     temperature = 1.0
     top_k = 50
@@ -209,7 +208,7 @@ Government magic"""
     last_timestep = True
 
     pred_text = generate_text(
-        sequence=test_sequence_c.lower(),
+        sequence=test_sequence_a.lower(),
         model=model,
         temperature=temperature,
         top_k=top_k,

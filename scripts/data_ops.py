@@ -28,7 +28,21 @@ class DataTokenizer:
         special_tokens=None,
         enable_padding=False,
         enable_truncation=False,
-    ):
+    ) -> None:
+        """Tokenization object for tokenizing text corpus.
+
+        Args:
+            file_names (list): List of file names.
+            tokenizer (Tokenizer): Tokenizer to be used.
+            vocab_size (int): Vocab size.
+            max_length (int): Max length of tokenized text.
+            special_tokens (list): List of special tokens.
+            enable_padding (bool): If True, add padding token to tokenized text.
+            enable_truncation (bool): If True, truncate tokenized text.
+
+        Return:
+            None.
+        """
 
         if tokenizer is not None:
             self.tokenizer = tokenizer
@@ -121,7 +135,7 @@ class DataTokenizer:
             else tokenizer_name
         )
         path = f"../artefacts/tokenizers/{tokenizer_name}"
-        tokenizer = cls(file_names=None, tokenizer=Tokenizer.from_file(path))
+        tokenizer = cls(file_names=os.path.splitext(tokenizer_name)[0], tokenizer=Tokenizer.from_file(path))
         return tokenizer
 
     @classmethod

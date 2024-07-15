@@ -1,6 +1,6 @@
 {
     "narrow": true,
-    "num_heads": 4,
+    "num_heads": 2,
     "num_decoder_blocks": 4,
     "num_embeddings": 4096,
     "embedding_dim": 128,

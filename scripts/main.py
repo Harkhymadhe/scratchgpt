@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
+import os.path
 
 import torch
 from torch.utils.data import DataLoader
 
 from scripts.llms import PretrainedGPT
-from scripts.data_ops import FelaDataset
+from scripts.data_ops import TextDataset
 from scripts.train_ops import training_loop_with_batch
 
 from torch import optim
 
 from torchinfo import summary
+import json
 
 
 if __name__ == "__main__":
@@ -24,64 +26,130 @@ if __name__ == "__main__":
     args = args.parse_args()
 
     if args.files is None:
-        file_paths = "../datasets/works_of_fela.txt"
+        file_names = "works_of_fela.txt"
     else:
-        file_paths = args.files
+        file_names = args.files
 
-    epochs = 20
-    lr = 1e-3
+    tokenizer_name = os.path.splitext(file_names)[0] + ".json"
 
-    narrow = True
-
-    hidden_dim = 64
-    state_dim = 64
-    max_token = 256
-    seq_len = 100
-
-    dataset = FelaDataset(
-        data_path=file_paths,
-        tokenizer_path="works_of_fela.json",
-        time_steps=seq_len,
+    # Set hyperparameters
+    model_kwargs = dict(json.load(open("../config/model_config.json")))
+    hyperparameter_kwargs = dict(
+        json.load(open("../config/hyperparameters_config.json"))
     )
 
-    num_embeddings = dataset.data_processor.get_vocab_size()
-    num_heads = 8
-    num_decoder_blocks = 8
-    decoder_only = False
+    narrow = model_kwargs["narrow"]
+    num_heads = model_kwargs["num_heads"]
+    num_decoder_blocks = model_kwargs["num_decoder_blocks"]
+    num_embeddings = model_kwargs["num_embeddings"]
+    embedding_dim = model_kwargs["embedding_dim"]
+    max_token = model_kwargs["max_token"]
+    pre_ln = model_kwargs["pre_ln"]
+    share_weights = model_kwargs["share_weights"]
+    dropout_rate = model_kwargs["dropout_rate"]
+    train_pwe = model_kwargs["train_pwe"]
 
-    ablate = False
-    pre_ln = True
+    seq_len = hyperparameter_kwargs["seq_len"]
+    epochs = hyperparameter_kwargs["epochs"]
+    lr = hyperparameter_kwargs["lr"]
+    batch_size = hyperparameter_kwargs["batch_size"]
+    weight_decay = hyperparameter_kwargs["weight_decay"]
+    use_last = hyperparameter_kwargs["use_last"]
 
-    batch_size = 512
+    batch_size_in_tokens = 2**19
+    batch_size = 32
+    gradient_accumulation_steps = 10
+    # gradient_accumulation_steps = batch_size_in_tokens / (batch_size * seq_len)
 
+    # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
+    # Prepare dataset
+    augment_data = True
+    train_dataset = TextDataset(
+        file_name=file_names,
+        tokenizer_path=tokenizer_name,
+        time_steps=seq_len,
+        min_length=seq_len,
+        train=True,
+        frac=0.85,
+        augment_data=augment_data,
+    )
 
-    x_sample, y_sample = next(iter(dataloader))
+    test_dataset = TextDataset(
+        file_name=file_names,
+        tokenizer_path=tokenizer_name,
+        time_steps=seq_len,
+        min_length=seq_len,
+        train=False,
+        frac=0.15,
+        augment_data=augment_data,
+    )
+
+    # Generate dataloader
+    train_dataloader = DataLoader(
+        dataset=train_dataset, batch_size=batch_size, shuffle=True
+    )
+    test_dataloader = DataLoader(
+        dataset=test_dataset, batch_size=batch_size, shuffle=False
+    )
+
+    # Sample data loader
+    x_sample, y_sample = next(iter(train_dataloader))
     x_sample, y_sample = x_sample.to(device), y_sample.to(device)
 
-    attn = PretrainedGPT(
+    # Set TF32 precision
+    torch.set_float32_matmul_precision("high")
+
+    # Instantiate model
+    model = PretrainedGPT(
         narrow=narrow,
         num_heads=num_heads,
         num_decoder_blocks=num_decoder_blocks,
-        num_embeddings=num_embeddings,
-        embedding_dim=hidden_dim,
-        ablate=ablate,
+        num_embeddings=train_dataset.data_processor.get_vocab_size(),
+        embedding_dim=embedding_dim,
         max_token=max_token,
         pre_ln=pre_ln,
-    ).to(device)
+        train_pwe=train_pwe,
+        share_weights=share_weights,
+        dropout_rate=dropout_rate,
+    )
+    model.to(device)
 
-    optimizer = optim.AdamW(attn.parameters(), lr=lr, foreach=True)
 
+    # # Compile model
+    # if hasattr(torch, "compile"):
+    #     print("Compiling model...")
+    #     model = torch.compile(model, backend="inductor")
+
+    # Instantiate optimizer
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=lr,
+        weight_decay=weight_decay,
+        betas=(0.9, 0.95),  # beta values for GPT-3
+        fused=True,
+    )
+
+    # Train model and return results
     train_artefacts = training_loop_with_batch(
-        model=attn,
-        dataset=dataloader,
+        model=model,
+        train_dataloader=train_dataloader,
+        test_dataloader=test_dataloader,
         optimizer=optimizer,
         scheduler=None,
         epochs=epochs,
         device=device,
-        stack_metrics=False,  # DO NOT CHANGE!
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        use_last=use_last,  # DO NOT CHANGE!
+    )
+
+    model_kwargs["num_embeddings"] = train_dataset.data_processor.get_vocab_size()
+
+    # Save config files for future reference
+    json.dump(model_kwargs, open(train_artefacts["model_config_path"], "w"))
+    json.dump(
+        hyperparameter_kwargs, open(train_artefacts["hyperparameter_config_path"], "w")
     )
 
     train_artefacts["model"] = train_artefacts["model"].eval()
@@ -93,5 +161,5 @@ if __name__ == "__main__":
 
     summary(train_artefacts["model"], input_data=x_sample)
 
-    print("Number of embeddings:", num_embeddings)
+    print("Number of embeddings:", model_kwargs["num_embeddings"])
     print("Final output shape:", out.shape)

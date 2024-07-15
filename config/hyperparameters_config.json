@@ -1,5 +1,5 @@
 {
-    "epochs": 100,
+    "epochs": 30,
     "lr": 6e-4,
     "weight_decay": 1e-1,
     "seq_len": 256,
