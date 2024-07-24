@@ -182,6 +182,7 @@ def training_loop_with_batch(
         "perplexity": [TRAIN_PERPLEXITY, TEST_PERPLEXITY],
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict(),
+        "scheduler_state": None if scheduler is None else scheduler.state_dict(),
         "final_epoch_index": epochs - 1,
         "model_config_path": os.path.join(subfolder, f"model_config_{timestamp}.json"),
         "hyperparameter_config_path": os.path.join(
