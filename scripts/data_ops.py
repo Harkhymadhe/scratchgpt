@@ -135,7 +135,10 @@ class DataTokenizer:
             else tokenizer_name
         )
         path = f"../artefacts/tokenizers/{tokenizer_name}"
-        tokenizer = cls(file_names=os.path.splitext(tokenizer_name)[0], tokenizer=Tokenizer.from_file(path))
+        tokenizer = cls(
+            file_names=os.path.splitext(tokenizer_name)[0],
+            tokenizer=Tokenizer.from_file(path),
+        )
         return tokenizer
 
     @classmethod

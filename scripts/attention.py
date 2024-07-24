@@ -238,7 +238,9 @@ class MultiHeadCrossAttention(nn.Module):
 
     def forward(self, key, query, mask=None):
         # Transform and reshape the keys, values and queries
-        key, value = torch.split(self.key_transform(key), split_size_or_sections=key.size(-1)//2, dim=-1)
+        key, value = torch.split(
+            self.key_transform(key), split_size_or_sections=key.size(-1) // 2, dim=-1
+        )
         query = self.query_transform(query)
 
         if (

@@ -116,15 +116,37 @@ if __name__ == "__main__":
     )
     model.to(device)
 
-
     # # Compile model
     # if hasattr(torch, "compile"):
     #     print("Compiling model...")
     #     model = torch.compile(model, backend="inductor")
 
     # Instantiate optimizer
+
+    decay_params = list(filter(lambda x: x.dim() >= 2, model.parameters()))
+    non_decay_params = list(filter(lambda x: x.dim() < 2, model.parameters()))
+
+    num_decay_params = sum(p.numel() for p in decay_params)
+    num_non_decay_params = sum(p.numel() for p in non_decay_params)
+
+    print(
+        "Number of decaying params: {}\nNumber of non-decaying params: {}".format(
+            num_decay_params, num_non_decay_params
+        )
+    )
+
+    param_groups = [
+        {
+            "params": decay_params,
+            "weight_decay": weight_decay,
+        },
+        {
+            "params": non_decay_params,
+            "weight_decay": 0.0,
+        },
+    ]
     optimizer = optim.AdamW(
-        model.parameters(),
+        params=param_groups,
         lr=lr,
         weight_decay=weight_decay,
         betas=(0.9, 0.95),  # beta values for GPT-3
@@ -132,6 +154,19 @@ if __name__ == "__main__":
     )
 
     # Train model and return results
+    # train_artefacts = training_loop_with_batch(
+    #     model=model,
+    #     train_dataloader=train_dataloader,
+    #     test_dataloader=test_dataloader,
+    #     optimizer=optimizer,
+    #     scheduler=None,
+    #     epochs=epochs,
+    #     device=device,
+    #     gradient_accumulation_steps=gradient_accumulation_steps,
+    #     chained_scheduler=True,
+    #     use_last=use_last,  # DO NOT CHANGE!
+    # )
+
     train_artefacts = training_loop_with_batch(
         model=model,
         train_dataloader=train_dataloader,
@@ -141,6 +176,9 @@ if __name__ == "__main__":
         epochs=epochs,
         device=device,
         gradient_accumulation_steps=gradient_accumulation_steps,
+        warmup_steps=10,
+        chained_scheduler=True,
+        use_scheduler=False,
         use_last=use_last,  # DO NOT CHANGE!
     )
 

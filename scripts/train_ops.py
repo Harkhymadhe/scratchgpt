@@ -8,6 +8,14 @@ from torch import nn
 
 from sklearn.metrics import accuracy_score
 
+from torch.optim import lr_scheduler
+
+
+scheduler_1 = None
+scheduler_2 = None
+optimizer = None
+
+
 __all__ = ["training_loop_with_batch"]
 
 
@@ -22,11 +30,46 @@ def training_loop_with_batch(
     device: str = "cpu",
     use_last: bool = True,
     gradient_accumulation_steps: int = 1,
+    warmup_steps: int = 1000,
+    chained_scheduler = False,
+    use_scheduler = False,
 ):
+    # Get timestamp
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
     TRAIN_LOSSES, TRAIN_ACCS, TRAIN_PERPLEXITY = [], [], []
     TEST_LOSSES, TEST_ACCS, TEST_PERPLEXITY = [], [], []
 
     num_steps = len(iter(train_dataloader))
+    lr = optimizer.param_groups[0]["lr"]
+
+    if scheduler is None:
+        if use_scheduler:
+            if chained_scheduler:
+                scheduler_1 = lr_scheduler.LinearLR(
+                    optimizer=optimizer,
+                    start_factor=1/warmup_steps,
+                    end_factor=1.,
+                    total_iters=warmup_steps,
+                )
+
+                scheduler_2 = lr_scheduler.CosineAnnealingLR(
+                    optimizer=optimizer,
+                    T_max=len(iter(train_dataloader)) * (epochs + 1),
+                    eta_min=lr / 10,
+                    verbose=True
+                )
+
+                scheduler = lr_scheduler.ChainedScheduler(schedulers=[scheduler_1, scheduler_2])
+            else:
+                scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
+                    optimizer=optimizer,
+                    T_0=1,
+                    eta_min=lr / 10,
+                    verbose=True
+                )
+        else:
+            scheduler = None
 
     for epoch in range(1, epochs + 1):
         train_losses, train_accs, train_perplexity = [], [], []
@@ -83,6 +126,10 @@ def training_loop_with_batch(
             train_accs.append(train_acc)
 
         if scheduler is not None:
+            if hasattr(scheduler, "T_mult"):
+                scheduler.T_cur = step
+                scheduler.T_i = (num_steps * epochs) - warmup_steps
+
             scheduler.step()
 
         avg_train_loss = sum(train_losses) / len(train_losses)
@@ -137,6 +184,20 @@ def training_loop_with_batch(
 
             avg_test_perplexity = torch.exp(torch.tensor([avg_test_loss])).item()
 
+        final_timestamp = bool(epoch == epochs)
+
+        subfolder = persist_artefacts(
+            losses=[TRAIN_LOSSES, TEST_LOSSES],
+            accuracies=[TRAIN_ACCS, TEST_ACCS],
+            perplexities=[TRAIN_PERPLEXITY, TEST_PERPLEXITY],
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            epochs=epochs,
+            timestamp=timestamp,
+            final_timestamp=final_timestamp
+        )
+
         print(
             f"Epoch: {epoch} | Step: {step} | Train loss: {avg_train_loss: .3f} | Test loss: {avg_test_loss: .3f} | "
             f"Train perplexity: {avg_train_perplexity: .3f} | Test perplexity: {avg_test_perplexity: .3f} | ",
@@ -155,46 +216,6 @@ def training_loop_with_batch(
     torch.cuda.empty_cache()
     torch.clear_autocast_cache()
 
-    # Get timestamp
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-
-    # Persist state for model and optimizer
-    folder = f"../artefacts/models/{timestamp.split('-')[0]}/"
-
-    if not os.path.isdir(folder):
-        os.mkdir(folder)
-
-    subfolders = os.listdir(folder)
-
-    if len(subfolders) == 0:
-        subfolder = os.path.join(folder, str(len(subfolders) + 1))
-    else:
-        max_number = max([int(i) for i in subfolders])
-        subfolder = os.path.join(folder, str(max_number + 1))
-
-    os.mkdir(subfolder)
-
-    print("Artefacts are located in:", subfolder)
-
-    state = {
-        "loss": [TRAIN_LOSSES, TEST_LOSSES],
-        "accuracy": [TRAIN_ACCS, TEST_ACCS],
-        "perplexity": [TRAIN_PERPLEXITY, TEST_PERPLEXITY],
-        "model_state": model.state_dict(),
-        "optimizer_state": optimizer.state_dict(),
-        "scheduler_state": None if scheduler is None else scheduler.state_dict(),
-        "final_epoch_index": epochs - 1,
-        "model_config_path": os.path.join(subfolder, f"model_config_{timestamp}.json"),
-        "hyperparameter_config_path": os.path.join(
-            subfolder, f"hyperparameter_config_{timestamp}.json"
-        ),
-    }
-
-    torch.save(
-        state,
-        os.path.join(subfolder, f"{model.__class__.__name__}-{timestamp}.pt"),
-    )
-
     # Return persisted results
 
     return {
@@ -207,3 +228,62 @@ def training_loop_with_batch(
             subfolder, f"hyperparameter_config_{timestamp}.json"
         ),
     }
+
+
+def persist_artefacts(losses, accuracies, perplexities, model, optimizer, scheduler, epochs, timestamp, final_timestamp=False):
+    # Persist state for model and optimizer
+    folder = f"../artefacts/models/{timestamp.split('-')[0]}/"
+
+    if not os.path.isdir(folder):
+        os.mkdir(folder)
+
+    subfolders = os.listdir(folder)
+
+    if final_timestamp:
+        try:
+            subfolders.remove("checkpoints")
+        except:
+            pass
+        if len(subfolders) == 0:
+            subfolder = os.path.join(folder, str(len(subfolders) + 1))
+        else:
+            max_number = max([int(i) for i in subfolders if i.isnumeric()])
+            subfolder = os.path.join(folder, str(max_number + 1))
+
+        os.mkdir(subfolder)
+        STATE_PATH = os.path.join(subfolder, f"{model.__class__.__name__}-{timestamp}.pt")
+    else:
+        subfolder = f"../artefacts/models/{timestamp.split('-')[0]}/checkpoints/"
+
+        if os.path.exists(subfolder):
+            pass
+        else:
+            os.mkdir(subfolder)
+
+        num_subfolders = len(os.listdir(subfolder)) + 1
+        subfolder = os.path.join(subfolder, str(num_subfolders))
+        os.mkdir(subfolder)
+
+        STATE_PATH = os.path.join(subfolder, f"{model.__class__.__name__}_{timestamp}.pt")
+
+    print("Artefacts are located in:", subfolder)
+
+    state = {
+        "loss": losses,
+        "accuracy": accuracies,
+        "perplexity": perplexities,
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "scheduler_state": None if scheduler is None else scheduler.state_dict(),
+        "final_epoch_index": epochs - 1,
+        "model_config_path": os.path.join(subfolder, f"model_config_{timestamp}.json"),
+        "hyperparameter_config_path": os.path.join(
+            subfolder, f"hyperparameter_config_{timestamp}.json"
+        ),
+    }
+
+    torch.save(
+        state,
+        STATE_PATH,
+    )
+    return subfolder
