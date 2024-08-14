@@ -244,6 +244,9 @@ class DataProcessorv2:
             for i in range(0, num_tokens)
         ]
 
+        print(f"Total number of raw chunks: {len(data_samples)}")
+        print(f"Size of each raw chunk: {len(data_samples[0])}")
+
         if self.augment_data:
             data_samples = self.offset_augmentation(
                 data_samples, time_steps=time_steps, offset_ratios=None
@@ -253,6 +256,7 @@ class DataProcessorv2:
             )
 
         data_samples = self.filter_data(data_samples, min_length=self.min_length)
+        print(f"Total number of tokens: {len(data_samples)}")
         # data_samples = [
         #     (
         #         sample

@@ -10,13 +10,7 @@ from sklearn.metrics import accuracy_score
 
 from torch.optim import lr_scheduler
 
-
-scheduler_1 = None
-scheduler_2 = None
-optimizer = None
-
-
-__all__ = ["training_loop_with_batch"]
+__all__ = ["training_loop_with_batch", "persist_artefacts", "restore_artefacts"]
 
 
 def training_loop_with_batch(
@@ -31,8 +25,11 @@ def training_loop_with_batch(
     use_last: bool = True,
     gradient_accumulation_steps: int = 1,
     warmup_steps: int = 1000,
-    chained_scheduler = False,
-    use_scheduler = False,
+    chained_scheduler=False,
+    use_scheduler=False,
+    resume_training=False,
+    resume_date=None,
+    resume_epoch=-1,
 ):
     # Get timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -48,8 +45,8 @@ def training_loop_with_batch(
             if chained_scheduler:
                 scheduler_1 = lr_scheduler.LinearLR(
                     optimizer=optimizer,
-                    start_factor=1/warmup_steps,
-                    end_factor=1.,
+                    start_factor=1 / warmup_steps,
+                    end_factor=1.0,
                     total_iters=warmup_steps,
                 )
 
@@ -57,21 +54,36 @@ def training_loop_with_batch(
                     optimizer=optimizer,
                     T_max=len(iter(train_dataloader)) * (epochs + 1),
                     eta_min=lr / 10,
-                    verbose=True
+                    verbose=True,
                 )
 
-                scheduler = lr_scheduler.ChainedScheduler(schedulers=[scheduler_1, scheduler_2])
+                scheduler = lr_scheduler.ChainedScheduler(
+                    schedulers=[scheduler_1, scheduler_2]
+                )
             else:
                 scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-                    optimizer=optimizer,
-                    T_0=1,
-                    eta_min=lr / 10,
-                    verbose=True
+                    optimizer=optimizer, T_0=1, eta_min=lr / 10, verbose=True
                 )
         else:
             scheduler = None
 
-    for epoch in range(1, epochs + 1):
+    if resume_training:
+        model, optimizer, scheduler, losses, accuracies, perplexities, epoch_ = restore_artefacts(
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            date=resume_date,
+            epoch=resume_epoch,
+        )
+        TRAIN_LOSSES, TEST_LOSSES = losses
+        TRAIN_ACCS, TEST_ACCS = accuracies
+        TRAIN_PERPLEXITY, TEST_PERPLEXITY = perplexities
+
+        epochs += epoch_
+    else:
+        epoch_ = 1
+
+    for epoch in range(epoch_, epochs + 1):
         train_losses, train_accs, train_perplexity = [], [], []
         test_losses, test_accs, test_perplexity = [], [], []
 
@@ -95,11 +107,13 @@ def training_loop_with_batch(
                     train_batch_targets = train_batch_targets.flatten()
 
                     train_loss = criterion(y_pred, train_batch_targets)
-                    train_loss = train_loss / gradient_accumulation_steps  # Scale loss for gradient accumulation
+                    train_loss = (
+                        train_loss / gradient_accumulation_steps
+                    )  # Scale loss for gradient accumulation
 
             train_loss.backward()  # Backpropagate the loss
 
-            if (step + 1) % gradient_accumulation_steps == 0:
+            if step % gradient_accumulation_steps == 0:
                 # Clip the gradient norms to 1.0
                 nn.utils.clip_grad_norm_(
                     parameters=model.parameters(), max_norm=1.0, foreach=True
@@ -193,9 +207,9 @@ def training_loop_with_batch(
             model=model,
             optimizer=optimizer,
             scheduler=scheduler,
-            epochs=epochs,
+            epochs=(epoch + epoch_ if resume_training else epoch),
             timestamp=timestamp,
-            final_timestamp=final_timestamp
+            final_timestamp=final_timestamp,
         )
 
         print(
@@ -230,9 +244,23 @@ def training_loop_with_batch(
     }
 
 
-def persist_artefacts(losses, accuracies, perplexities, model, optimizer, scheduler, epochs, timestamp, final_timestamp=False):
+def persist_artefacts(
+    losses,
+    accuracies,
+    perplexities,
+    model,
+    optimizer,
+    scheduler,
+    epochs,
+    timestamp,
+    colab_dir=None,
+    persist_colab=False,
+    final_timestamp=False,
+):
     # Persist state for model and optimizer
     folder = f"../artefacts/models/{timestamp.split('-')[0]}/"
+    if persist_colab:
+        colab_folder = os.path.join(colab_dir, f"artefacts/models/{timestamp.split('-')[0]}/")
 
     if not os.path.isdir(folder):
         os.mkdir(folder)
@@ -251,7 +279,9 @@ def persist_artefacts(losses, accuracies, perplexities, model, optimizer, schedu
             subfolder = os.path.join(folder, str(max_number + 1))
 
         os.mkdir(subfolder)
-        STATE_PATH = os.path.join(subfolder, f"{model.__class__.__name__}-{timestamp}.pt")
+        STATE_PATH = os.path.join(
+            subfolder, f"{model.__class__.__name__}-{timestamp}.pt"
+        )
     else:
         subfolder = f"../artefacts/models/{timestamp.split('-')[0]}/checkpoints/"
 
@@ -264,7 +294,14 @@ def persist_artefacts(losses, accuracies, perplexities, model, optimizer, schedu
         subfolder = os.path.join(subfolder, str(num_subfolders))
         os.mkdir(subfolder)
 
-        STATE_PATH = os.path.join(subfolder, f"{model.__class__.__name__}_{timestamp}.pt")
+        STATE_PATH = os.path.join(
+            subfolder, f"{model.__class__.__name__}_{timestamp}.pt"
+        )
+
+    if persist_colab:
+        COLAB_STATE_PATH = os.path.join(
+            colab_folder, f"{model.__class__.__name__}_{timestamp}.pt"
+        )
 
     print("Artefacts are located in:", subfolder)
 
@@ -286,4 +323,52 @@ def persist_artefacts(losses, accuracies, perplexities, model, optimizer, schedu
         state,
         STATE_PATH,
     )
+
+    if persist_colab:
+        torch.save(
+            state,
+            COLAB_STATE_PATH,
+        )
     return subfolder
+
+
+def restore_artefacts(model, optimizer, scheduler, date, epoch=-1):
+    if epoch == -1:
+        epoch_folders = [int(i) for i in os.listdir(f"../artefacts/models/{date}/checkpoints")]
+        epoch = max(epoch_folders)
+
+    checkpoint_dir = f"../artefacts/models/{date}/checkpoints/{epoch}"
+
+    state_dict_path = [
+        os.path.join(checkpoint_dir, f)
+        for f in os.listdir(checkpoint_dir)
+        if f.endswith(".pt")
+    ][0]
+
+    state_dict = torch.load(state_dict_path, map_location="cpu")
+
+    model_state_dict = state_dict["model_state"]
+    optimizer_state_dict = state_dict["optimizer_state"]
+    scheduler_state_dict = state_dict["optimizer_state"]
+
+    losses = state_dict["loss"]
+    accuracies = state_dict["accuracy"]
+    perplexities = state_dict["perplexity"]
+
+    model.load_state_dict(state_dict=model_state_dict)
+
+    optimizer.load_state_dict(optimizer_state_dict)
+
+    # print(scheduler_state_dict)
+
+    scheduler.load_state_dict(scheduler_state_dict)
+
+    model.train()
+
+    print(f">>> Backpropagating any accumulated gradients...\n")
+    optimizer.step()
+    optimizer.zero_grad()
+
+    print(f">>> Resuming training from epoch {epoch}...\n")
+
+    return model, optimizer, scheduler, losses, accuracies, perplexities, epoch

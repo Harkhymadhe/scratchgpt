@@ -17,7 +17,7 @@ if __name__ == "__main__":
     args = args.parse_args()
 
     if args.files is None:
-        file_names = "works_of_fela.txt"
+        file_names = "george_orwell.txt"
     else:
         file_names = args.files
 
@@ -26,7 +26,9 @@ if __name__ == "__main__":
 
     # Train tokenizer
     tokenizer = DataTokenizer(file_names=file_names, vocab_size=args.vocab_size)
-    tokenizer.train_tokenizers()
+    # tokenizer.train_tokenizers()
+
+    tokenizer = DataTokenizer.from_pretrained(os.path.splitext(file_names)[0])
 
     print(f"Vocabulary size for dataset: {tokenizer.tokenizer.get_vocab_size()}")
     encoding = tokenizer.tokenizer.encode("No wahala, senior man.")
@@ -100,3 +102,5 @@ if __name__ == "__main__":
                 n += 1
 
     print(f"Faulty batches: {n}/{len(dataset)}")
+    print(f"Number of batches: {len(dataset)/batch_size}")
+    print(f"Data Augmentation: {augment_data}")

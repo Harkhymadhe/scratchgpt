@@ -26,7 +26,7 @@ if __name__ == "__main__":
     args = args.parse_args()
 
     if args.files is None:
-        file_names = "works_of_fela.txt"
+        file_names = "edgar_alan_poe.txt"
     else:
         file_names = args.files
 
@@ -65,14 +65,19 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Prepare dataset
+    train_frac = 0.85
+
+    assert train_frac <= 1.0, "Ensure the train fraction is between 0 and 1."
+    test_frac = 1. - train_frac
     augment_data = True
+
     train_dataset = TextDataset(
         file_name=file_names,
         tokenizer_path=tokenizer_name,
         time_steps=seq_len,
         min_length=seq_len,
         train=True,
-        frac=0.85,
+        frac=train_frac,
         augment_data=augment_data,
     )
 
@@ -82,7 +87,7 @@ if __name__ == "__main__":
         time_steps=seq_len,
         min_length=seq_len,
         train=False,
-        frac=0.15,
+        frac=test_frac,
         augment_data=augment_data,
     )
 
@@ -177,8 +182,10 @@ if __name__ == "__main__":
         device=device,
         gradient_accumulation_steps=gradient_accumulation_steps,
         warmup_steps=10,
-        chained_scheduler=True,
-        use_scheduler=False,
+        chained_scheduler=False,
+        use_scheduler=True,
+        resume_training=True,
+        resume_date="20240728",
         use_last=use_last,  # DO NOT CHANGE!
     )
 
