@@ -27,6 +27,7 @@ class GPT(nn.Module):
         dropout_rate=0.1,
         narrow=True,
         pre_ln=False,
+        use_bias=False,
         train_pwe=False,
     ):
         super(GPT, self).__init__()
@@ -38,6 +39,7 @@ class GPT(nn.Module):
         self.num_heads = num_heads
         self.train_pwe = train_pwe
         self.dropout_rate = dropout_rate
+        self.use_bias = use_bias
 
         self.embedding_system = EmbeddingSystem(
             text_embedding_dim=embedding_dim,
@@ -57,6 +59,7 @@ class GPT(nn.Module):
             num_heads=self.num_heads,
             ablate=True,
             pre_ln=pre_ln,
+            use_bias=use_bias,
             dropout_rate=self.dropout_rate,
         )
 
@@ -132,6 +135,7 @@ class PretrainedGPT(nn.Module):
         train_pwe=False,
         share_weights=False,
         dropout_rate=0.1,
+        use_bias=False,
     ):
         super().__init__()
 
@@ -145,6 +149,7 @@ class PretrainedGPT(nn.Module):
             pre_ln=pre_ln,
             train_pwe=train_pwe,
             dropout_rate=dropout_rate,
+            use_bias=use_bias,
         )
 
         self.pretrained_head = GPTPretrainedHead(
