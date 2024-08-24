@@ -25,6 +25,7 @@ class TransformerEncoderBlock(nn.Module):
         num_heads=32,
         pre_ln=False,
         dropout_rate=0.1,
+        use_bias=False
     ):
         super().__init__()
 
@@ -35,6 +36,8 @@ class TransformerEncoderBlock(nn.Module):
             hidden_dim=hidden_dim,
             state_dim=state_dim,
             num_heads=num_heads,
+            use_bias=use_bias,
+            dropout_probability=dropout_rate,
         )
         self.feed_forward = nn.Sequential(
             nn.Linear(
@@ -82,6 +85,7 @@ class TransformerDecoderBlock(nn.Module):
         pre_ln=True,
         dropout_rate=0.1,
         ablate=False,
+        use_bias=False,
     ):
         super().__init__()
 
@@ -95,6 +99,8 @@ class TransformerDecoderBlock(nn.Module):
                 hidden_dim=hidden_dim,
                 state_dim=state_dim,
                 num_heads=num_heads,
+                use_bias=use_bias,
+                dropout_probability=dropout_rate,
             )
             self.layer_norm2 = nn.LayerNorm(hidden_dim)
             self.dropout2 = nn.Dropout(dropout_rate)
@@ -104,6 +110,8 @@ class TransformerDecoderBlock(nn.Module):
             hidden_dim=hidden_dim,
             state_dim=state_dim,
             num_heads=num_heads,
+            use_bias=use_bias,
+            dropout_probability=dropout_rate,
         )
         self.feed_forward = nn.Sequential(
             nn.Linear(
@@ -178,6 +186,7 @@ class TransformerEncoder(nn.Module):
         num_heads=32,
         pre_ln=False,
         dropout_rate=0.1,
+        use_bias=False,
     ):
         super(TransformerEncoder, self).__init__()
 
@@ -189,6 +198,7 @@ class TransformerEncoder(nn.Module):
                 num_heads=num_heads,
                 pre_ln=pre_ln,
                 dropout_rate=dropout_rate,
+                use_bias=use_bias,
             )
             for _ in range(num_encoder_blocks)
         ]
@@ -214,6 +224,7 @@ class TransformerDecoder(nn.Module):
         ablate=True,
         pre_ln=False,
         dropout_rate=0.1,
+        use_bias=False,
     ):
         super(TransformerDecoder, self).__init__()
 
@@ -226,6 +237,7 @@ class TransformerDecoder(nn.Module):
                 ablate=ablate,
                 pre_ln=pre_ln,
                 dropout_rate=dropout_rate,
+                use_bias=use_bias,
             )
             for _ in range(num_decoder_blocks)
         ]
@@ -256,6 +268,7 @@ class Transformer(nn.Module):
         ablate=True,
         pre_ln=False,
         dropout_rate=0.1,
+        use_bias=False,
     ):
         super(Transformer, self).__init__()
 
@@ -270,6 +283,7 @@ class Transformer(nn.Module):
                 num_encoder_blocks=num_encoder_blocks,
                 pre_ln=pre_ln,
                 dropout_rate=dropout_rate,
+                use_bias=use_bias,
             )
 
         self.decoder = TransformerDecoder(
@@ -281,6 +295,7 @@ class Transformer(nn.Module):
             ablate=ablate,
             pre_ln=pre_ln,
             dropout_rate=dropout_rate,
+            use_bias=use_bias,
         )
 
     def forward(self, x_encoder, x_decoder, source_mask=None, target_mask=None):
