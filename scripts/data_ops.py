@@ -2,6 +2,7 @@
 
 import os
 import re
+import string
 
 import torch
 from torch.utils.data import Dataset
@@ -211,16 +212,128 @@ class DataProcessorv2:
     def get_vocab_size(self):
         return self.tokenizer.tokenizer.get_vocab_size()
 
-    def process_file(self, file_path, time_steps=100, **kwargs):
+    @staticmethod
+    def load_file(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.readlines()
 
-        # Filter out lines linking to the website the Fela data was obtained from
-        content = list(filter(lambda x: "※" not in x, content))
+        return content
 
-        # content = [c.strip() for c in content]
-        content = " ".join(content)
-        tokenized_content = self.tokenizer.encode(content, **kwargs).ids
+    def preprocess_fela_file_v1(self, file_contents):
+        # Filter out lines linking to the website the Fela data was obtained from
+        file_contents = list(filter(lambda x: "※" not in x, file_contents))
+
+        song_boundaries = [i for i, line in enumerate(file_contents) if list(set(line[:-1])) == ["_"]]
+
+        for i in song_boundaries:
+            file_contents[i] = "</s>\n<s>\n"
+
+        return file_contents
+
+
+    def preprocess_fela_file(self, file_contents):
+        # Filter out lines linking to the website the Fela data was obtained from
+        file_contents = list(filter(lambda x: "※" not in x, file_contents))
+
+        song_boundaries = [i for i, line in enumerate(file_contents) if list(set(line[:-1])) == ["_"]]
+
+        return file_contents, song_boundaries
+
+    def preprocess_edgar_file_v1(self, file_contents):
+        # Filter out lines filled with whitespaces
+        file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
+
+        song_boundaries = [
+            i for i, line in enumerate(file_contents) if (line.lstrip()[0] == "*" and line.lstrip()[-2] == "*")
+        ]
+
+        for i in song_boundaries:
+            file_contents[i] = "</s>\n<s>\n"
+
+        return file_contents
+
+    def preprocess_edgar_file(self, file_contents):
+        # Filter out lines filled with whitespaces
+        file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
+
+        song_boundaries = [
+            i for i, line in enumerate(file_contents) if (line.lstrip()[0] == "*" and line.lstrip()[-2] == "*")
+        ]
+
+        return file_contents, song_boundaries
+
+    def preprocess_orwell_file_v1(self, file_contents):
+        # Filter out lines filled with whitespaces
+        file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
+
+        song_boundaries = [
+            i for i, line in enumerate(file_contents) if line.startswith("THE END")
+        ]
+
+        for i in song_boundaries:
+            file_contents[i] = "</s>\n<s>\n"
+
+        return file_contents
+
+    def preprocess_orwell_file(self, file_contents):
+        # Filter out lines filled with whitespaces
+        file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
+
+        song_boundaries = [
+            i for i, line in enumerate(file_contents) if line.startswith("THE END")
+        ]
+
+        return file_contents, song_boundaries
+
+    def preprocess_line(self, line):
+        punctuation = string.punctuation.replace(" ", "")
+        punctuation = punctuation.replace(",", "")
+        punctuation = punctuation.replace(";", "")
+
+        return line if len(line) == 1 else (line if line[-2] in punctuation else line.strip() + " ")
+
+    def preprocess_file(self, file_contents, file="fela"):
+        assert file in ["fela", "orwell", "poe"], "File must be one of `{}`, `{}`, or `{}`".format("fela", "orwell", "poe")
+        final_contents = []
+
+        if file == "fela":
+            file_contents, song_boundaries = self.preprocess_fela_file(file_contents)
+        elif file == "orwell":
+            file_contents, song_boundaries = self.preprocess_orwell_file(file_contents)
+        else:
+            file_contents, song_boundaries = self.preprocess_edgar_file(file_contents)
+
+        start_idx = 0
+        for i in song_boundaries:
+            common_lines = file_contents[start_idx:i]
+            common_lines = list(map(self.preprocess_line, common_lines))
+            book = "".join(common_lines)
+            final_contents.append("<s>\n" + book + "\n</s>")
+            start_idx = i + 1
+
+        if start_idx < len(file_contents) - 1:
+            common_lines = file_contents[start_idx:]
+            common_lines = list(map(self.preprocess_line, common_lines))
+            book = "".join(common_lines)
+            final_contents.append("<s>\n" + book + "\n</s>")
+
+        return final_contents
+
+    def process_file(self, file_path, time_steps=100, **kwargs):
+        file_contents = self.load_file(file_path=file_path)
+        file = os.path.splitext(file_path.split(os.sep)[-1])[0].split("_")[-1]
+
+        file_contents = self.preprocess_file(file_contents=file_contents, file=file)
+
+        processed_chunks = []
+
+        for chunk in file_contents:
+            processed_chunks += self.process_file_chunk(file_chunk=chunk, time_steps=time_steps, **kwargs)
+
+        return processed_chunks
+
+    def process_file_chunk(self, file_chunk, time_steps=100, **kwargs):
+        tokenized_content = self.tokenizer.encode(file_chunk, **kwargs).ids
 
         self.tokenized_content = tokenized_content
 
@@ -392,3 +505,20 @@ class TextDataset(Dataset):
     def __getitem__(self, index):
         data = torch.tensor(self.data[index])
         return data[:-1], data[1:]
+
+
+if __name__ == "__main__":
+    file_name = "george_orwell"
+    file = file_name.split("_")[-1]
+
+    file_path = "../datasets/raw/" + file_name
+
+    processor = DataProcessorv2(tokenizer_name=f"{file_name}.json")
+    file_contents = processor.process_file(file_path=f"{file_path}.txt")
+
+    # file_contents_ = processor.preprocess_edgar_file(file_contents=file_contents)
+    # file_contents_ = processor.process_file(file_contents=file_contents, file=file)
+
+    print(file_contents)
+    print(f"Number of stories by George Orwell: {len(file_contents)}")
+    print(file_contents[-1])

@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from scripts.llms import PretrainedGPT
-from scripts.data_ops import TextDataset
+from scripts.data_ops_v1 import TextDataset
 from scripts.train_ops import training_loop_with_batch
 
 from torch import optim
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     args = args.parse_args()
 
     if args.files is None:
-        file_names = "edgar_alan_poe.txt"
+        file_names = "george_orwell.txt"
     else:
         file_names = args.files
 

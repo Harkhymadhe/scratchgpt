@@ -5,8 +5,10 @@ import torch
 import numpy as np
 import json
 
+from collections import OrderedDict
+
 from scripts.llms import PretrainedGPT
-from scripts.data_ops import DataProcessor
+from scripts.data_ops_v1 import DataProcessor
 
 __all__ = [
     "load_state_dicts",
@@ -30,6 +32,10 @@ def load_state_dicts(timestamp, subfolder=1, tokenizer_path="works_of_fela.json"
     state_dict = torch.load(state_dict_path, map_location="cpu")
 
     model_state_dict = state_dict["model_state"]
+
+    for n in model_state_dict:
+        print(n)
+
     # print(model_state_dict)
 
     for k, v in model_kwargs.items():
@@ -37,7 +43,11 @@ def load_state_dicts(timestamp, subfolder=1, tokenizer_path="works_of_fela.json"
 
     model = PretrainedGPT(**model_kwargs)
 
-    model.load_state_dict(state_dict=model_state_dict)
+    try:
+        model.load_state_dict(state_dict=model_state_dict)
+    except:
+        model_state_dict = refactor_state_dict(model_state_dict)
+        model.load_state_dict(state_dict=model_state_dict)
 
     for param in model.parameters():
         param.requires_grad_(False)
@@ -45,6 +55,16 @@ def load_state_dicts(timestamp, subfolder=1, tokenizer_path="works_of_fela.json"
     model.eval()
 
     return model, tokenizer
+
+
+def refactor_state_dict(model_state_dict):
+    old_key = "gpt_stem.embedding_system.encoder_pos_embedding.positional_encoder.pos_encoding"
+    new_key = "gpt_stem.embedding_system.encoder_pos_embedding.positional_encoder.positional_encoding.weight"
+
+    model_state_dict = OrderedDict(
+        ((k, v) if old_key != k else (new_key, v.squeeze())) for k, v in model_state_dict.items()
+    )
+    return model_state_dict
 
 
 def generate_predictions(tokens, model, last_timestep=True):
@@ -183,10 +203,11 @@ def generate_text(
 
 
 if __name__ == "__main__":
-    timestamp = "20240709"
+    timestamp = "20240814"
     subfolder = 1
+    tokenizer_path = "edgar_alan_poe.json"
 
-    model, tokenizer = load_state_dicts(timestamp=timestamp, subfolder=subfolder)
+    model, tokenizer = load_state_dicts(timestamp=timestamp, subfolder=subfolder, tokenizer_path=tokenizer_path)
 
     test_sequence_a = "Something must kill man o\nSomething must kill man o\nWhether na water, we no know o"
     test_sequence_b = "Something must kill man\nSomething must kill man o"
@@ -199,6 +220,7 @@ if __name__ == "__main__":
     "\nWater dey go, water dey come"
     "Water dey go, water dey come\nThem go turn electric to candle\n"
     "Them go turn electric to candle\nGovernment magic\nGovernment magic"""
+    test_sequence_f = """And I said to her, "Never let them weigh you down"."""
 
     temperature = 1.0
     top_k = 50
@@ -208,7 +230,7 @@ if __name__ == "__main__":
     last_timestep = True
 
     pred_text = generate_text(
-        sequence=test_sequence_a.lower(),
+        sequence=test_sequence_f.lower(),
         model=model,
         temperature=temperature,
         top_k=top_k,

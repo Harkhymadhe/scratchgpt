@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-from data_ops import TextDataset, DataTokenizer, DataProcessorv2
+from data_ops_v1 import TextDataset, DataTokenizer, DataProcessorv2
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
