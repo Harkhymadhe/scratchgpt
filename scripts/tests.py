@@ -167,6 +167,9 @@ def run_tests(test_to_run=None, device="cpu"):
             num_blocks = int(96 / 3)
             embedding_dim = int(12288 / 3)
 
+        train_pwe = True
+        use_bias = True
+
         # Generate batch of sequences
         num_sequences = 2  # Batch size
         num_tokens = 10  # Number of timesteps per sequence
@@ -178,6 +181,18 @@ def run_tests(test_to_run=None, device="cpu"):
                 max_token,
             ),
         ).to(device)
+        # my_transformer = Transformer(
+        #     narrow=narrow,
+        #     hidden_dim=hidden_dim,
+        #     state_dim=state_dim,
+        #     num_heads=num_heads,
+        #     dropout_rate=dropout,
+        #     use_bias=use_bias,
+        #     ablate=True,
+        #     pre_ln=True,
+        #     decoder_only=True,
+        #     num_decoder_blocks=n_layers
+        # )
 
         model = model_constructor(
             num_heads=num_heads,
@@ -187,6 +202,8 @@ def run_tests(test_to_run=None, device="cpu"):
             max_token=max_token,
             narrow=narrow,
             pre_ln=pre_ln,
+            train_pwe=train_pwe,
+            use_bias=use_bias
         ).to(device)
 
         ans = torch.sum(model(x), dim=1)
