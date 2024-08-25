@@ -184,8 +184,7 @@ if __name__ == "__main__":
         warmup_steps=10,
         chained_scheduler=False,
         use_scheduler=True,
-        resume_training=True,
-        resume_date="20240728",
+        resume_training=False,
         use_last=use_last,  # DO NOT CHANGE!
     )
 
