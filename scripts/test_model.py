@@ -109,6 +109,7 @@ def probabilistic_sampling(logits):
 def generate_text(
     sequence,
     model,
+    tokenizer,
     temperature=1.0,
     top_k=5,
     special_tokens=None,
@@ -119,9 +120,12 @@ def generate_text(
 ):
     final_pred_tokens = []
 
-    input_tokens = tokenizer.tokenizer.encode(
-        sequence=sequence, add_special_tokens=True
-    ).ids
+    try:
+        input_tokens = tokenizer.tokenizer.encode(
+            sequence=sequence, add_special_tokens=True
+        ).ids
+    except:
+        input_tokens = tokenizer.tokenizer.encode(sequence)
 
     LEN = model.gpt_stem.embedding_system.encoder_pos_embedding.max_length
 
@@ -134,9 +138,14 @@ def generate_text(
 
     model.eval()
 
+    try:
+        pad_token = tokenizer.tokenizer.eos_token
+    except:
+        pad_token = 0
+
     while len(final_pred_tokens) < length_limit:
         if len(input_tokens) < LEN:
-            padded_tokens = [0 for _ in range(LEN - len(input_tokens))] + input_tokens
+            padded_tokens = [pad_token for _ in range(LEN - len(input_tokens))] + input_tokens
         else:
             padded_tokens = input_tokens.copy()
 
@@ -179,7 +188,10 @@ def generate_text(
         # print(tokenizer.tokenizer.decode(ids=pred_tokens))
 
         final_pred_tokens += pred_tokens
-        pred_token = tokenizer.tokenizer.decode(ids=pred_tokens[-1:])
+        try:
+            pred_token = tokenizer.tokenizer.decode(ids=pred_tokens[-1:])
+        except:
+            pred_token = tokenizer.tokenizer.decode(tokens=pred_tokens[-1:])
 
         input_tokens += pred_tokens
         input_tokens = input_tokens[1:]
@@ -190,7 +202,10 @@ def generate_text(
                 break
             continue
 
-    pred_text = tokenizer.tokenizer.decode(ids=final_pred_tokens)
+    try:
+        pred_text = tokenizer.tokenizer.decode(ids=final_pred_tokens)
+    except:
+        pred_text = tokenizer.tokenizer.decode(tokens=final_pred_tokens)
 
     if post_process:
         pred_text = pred_text.replace("\n ", "\n")
@@ -232,6 +247,7 @@ if __name__ == "__main__":
     pred_text = generate_text(
         sequence=test_sequence_f.lower(),
         model=model,
+        tokenizer=tokenizer,
         temperature=temperature,
         top_k=top_k,
         length_limit=length_limit,
