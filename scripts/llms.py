@@ -187,3 +187,114 @@ class PretrainedGPT(nn.Module):
     def forward(self, x):
         x = self.gpt_stem(x)
         return self.pretrained_head(x)
+
+    @classmethod
+    def load_weights(cls, model_type="gpt2"):
+        model_types = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl"]
+        assert model_type in model_types, (
+            "`model_type` must be one of {}".format(", ".join(model_types[:-1]) + "and " + model_types[-1]))
+        from transformers import GPT2LMHeadModel
+        pretrained_gpt = GPT2LMHeadModel.from_pretrained(model_type)
+        return pretrained_gpt
+
+    @classmethod
+    def map_weights_to_layers(cls, pretrained_model):
+        print(pretrained_model.config)
+        num_heads = pretrained_model.config.n_head
+        num_layers = pretrained_model.config.n_layer
+        num_embeddings = pretrained_model.config.vocab_size
+        max_token = pretrained_model.config.n_ctx
+        embedding_dim = pretrained_model.config.n_embd
+
+        model = PretrainedGPT(
+            num_heads=num_heads,
+            num_embeddings=num_embeddings,
+            max_token=max_token,
+            embedding_dim=embedding_dim,
+            num_decoder_blocks=num_layers,
+            narrow=True,
+            pre_ln=True,
+            train_pwe=True,
+            share_weights=True,
+            dropout_rate=0.1,
+            use_bias=False,
+        )
+
+        pretrained_gpt = pretrained_model.state_dict()
+        pretrained_gpt = {k: nn.Parameter(v) for k,v in pretrained_gpt.items()}
+
+        ### Load weights for embedding system (token and positional embeddings)
+
+        model.gpt_stem.embedding_system.encoder_embedding.embedding_layer.weight = pretrained_gpt['transformer.wte.weight']
+        model.gpt_stem.embedding_system.encoder_pos_embedding.positional_encoder.positional_encoding.weight = pretrained_gpt['transformer.wpe.weight']
+
+
+        ### Load weights for each decoder block
+        for layer_index in range(num_layers):
+            # Extract decoder block
+            model_block = model.gpt_stem.decoder.decoder.decoder[layer_index]
+
+            # Load weights and biases for attention LayerNorm
+            model_block.layer_norm1.weight = pretrained_gpt[f'transformer.h.{layer_index}.ln_1.weight']
+            model_block.layer_norm1.bias = pretrained_gpt[f'transformer.h.{layer_index}.ln_1.bias']
+
+            # Load weights and biases for FFN LayerNorm
+            model_block.layer_norm3.weight = pretrained_gpt[f'transformer.h.{layer_index}.ln_2.weight']
+            model_block.layer_norm3.bias = pretrained_gpt[f'transformer.h.{layer_index}.ln_2.bias']
+
+            # Split token transforms into key, query and value weights/biases
+            query_bias, key_bias, value_bias = torch.split(
+                pretrained_gpt[f'transformer.h.{layer_index}.attn.c_attn.bias'],
+                split_size_or_sections=embedding_dim,
+                dim=-1
+            )
+            query_weight, key_weight, value_weight = torch.split(
+                pretrained_gpt[f'transformer.h.{layer_index}.attn.c_attn.weight'],
+                split_size_or_sections=embedding_dim,
+                dim=-1
+            )
+
+            # Assign weights/biases for key transform to model
+            model_block.masked_attention.key_transform.weight = nn.Parameter(key_weight.t())
+            model_block.masked_attention.key_transform.bias = nn.Parameter(key_bias)
+
+            # Assign weights/biases for query transform to model
+            model_block.masked_attention.query_transform.weight = nn.Parameter(query_weight.t())
+            model_block.masked_attention.query_transform.bias = nn.Parameter(query_bias)
+
+            # Assign weights/biases for value transform to model
+            model_block.masked_attention.value_transform.weight = nn.Parameter(value_weight.t())
+            model_block.masked_attention.value_transform.bias = nn.Parameter(value_bias)
+
+            # Load weights and biases for attended context transform
+            model_block.masked_attention.context_transform.weight = nn.Parameter(pretrained_gpt[f'transformer.h.{layer_index}.attn.c_proj.weight'].t())
+            model_block.masked_attention.context_transform.bias = pretrained_gpt[f'transformer.h.{layer_index}.attn.c_proj.bias']
+
+            # model_block.dropout1 = gpt2_block.attn.attn_dropout
+            model_block.feed_forward[0].weight = nn.Parameter(pretrained_gpt[f'transformer.h.{layer_index}.mlp.c_fc.weight'].t())
+            model_block.feed_forward[0].bias = pretrained_gpt[f'transformer.h.{layer_index}.mlp.c_fc.bias']
+
+            model_block.feed_forward[-1].weight = nn.Parameter(pretrained_gpt[f'transformer.h.{layer_index}.mlp.c_proj.weight'].t())
+            model_block.feed_forward[-1].bias = pretrained_gpt[f'transformer.h.{layer_index}.mlp.c_proj.bias']
+
+            model.gpt_stem.decoder.decoder.decoder[layer_index] = model_block
+
+        ### Load weights for final layer norm before final output layer
+        model.pretrained_head.layer_norm.weight = pretrained_gpt['transformer.ln_f.weight']
+        model.pretrained_head.layer_norm.bias = pretrained_gpt['transformer.ln_f.bias']
+
+        ### Load weights for final token prediction head
+        # TODO: Use this...
+        # model.pretrained_head.decoder_head.weight = pretrained_gpt['transformer.wte.weight']
+        # model.pretrained_head.decoder_head.bias = pretrained_gpt['transformer.wte.bias']
+
+        # TODO: ...or this
+        model.pretrained_head.decoder_head.weight = nn.Parameter(pretrained_gpt['lm_head.weight'])
+        model.pretrained_head.decoder_head.bias = nn.Parameter(torch.zeros(pretrained_gpt['lm_head.weight'].shape[0]))
+
+        return model
+
+    @classmethod
+    def from_weights(cls, model_type="gpt2"):
+        pretrained_model = cls.load_weights(model_type=model_type)
+        return cls.map_weights_to_layers(pretrained_model=pretrained_model)
