@@ -68,7 +68,7 @@ if __name__ == "__main__":
     train_frac = 0.85
 
     assert train_frac <= 1.0, "Ensure the train fraction is between 0 and 1."
-    test_frac = 1. - train_frac
+    test_frac = 1.0 - train_frac
     augment_data = True
 
     train_dataset = TextDataset(

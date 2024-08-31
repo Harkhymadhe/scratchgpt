@@ -68,12 +68,14 @@ def training_loop_with_batch(
             scheduler = None
 
     if resume_training:
-        model, optimizer, scheduler, losses, accuracies, perplexities, epoch_ = restore_artefacts(
-            model=model,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            date=resume_date,
-            epoch=resume_epoch,
+        model, optimizer, scheduler, losses, accuracies, perplexities, epoch_ = (
+            restore_artefacts(
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                date=resume_date,
+                epoch=resume_epoch,
+            )
         )
         TRAIN_LOSSES, TEST_LOSSES = losses
         TRAIN_ACCS, TEST_ACCS = accuracies
@@ -260,7 +262,9 @@ def persist_artefacts(
     # Persist state for model and optimizer
     folder = f"../artefacts/models/{timestamp.split('-')[0]}/"
     if persist_colab:
-        colab_folder = os.path.join(colab_dir, f"artefacts/models/{timestamp.split('-')[0]}/")
+        colab_folder = os.path.join(
+            colab_dir, f"artefacts/models/{timestamp.split('-')[0]}/"
+        )
 
     if not os.path.isdir(folder):
         os.mkdir(folder)
@@ -334,7 +338,9 @@ def persist_artefacts(
 
 def restore_artefacts(model, optimizer, scheduler, date, epoch=-1):
     if epoch == -1:
-        epoch_folders = [int(i) for i in os.listdir(f"../artefacts/models/{date}/checkpoints")]
+        epoch_folders = [
+            int(i) for i in os.listdir(f"../artefacts/models/{date}/checkpoints")
+        ]
         epoch = max(epoch_folders)
 
     checkpoint_dir = f"../artefacts/models/{date}/checkpoints/{epoch}"

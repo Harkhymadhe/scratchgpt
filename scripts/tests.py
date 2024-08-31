@@ -203,7 +203,7 @@ def run_tests(test_to_run=None, device="cpu"):
             narrow=narrow,
             pre_ln=pre_ln,
             train_pwe=train_pwe,
-            use_bias=use_bias
+            use_bias=use_bias,
         ).to(device)
 
         ans = torch.sum(model(x), dim=1)

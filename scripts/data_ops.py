@@ -223,19 +223,22 @@ class DataProcessorv2:
         # Filter out lines linking to the website the Fela data was obtained from
         file_contents = list(filter(lambda x: "※" not in x, file_contents))
 
-        song_boundaries = [i for i, line in enumerate(file_contents) if list(set(line[:-1])) == ["_"]]
+        song_boundaries = [
+            i for i, line in enumerate(file_contents) if list(set(line[:-1])) == ["_"]
+        ]
 
         for i in song_boundaries:
             file_contents[i] = "</s>\n<s>\n"
 
         return file_contents
 
-
     def preprocess_fela_file(self, file_contents):
         # Filter out lines linking to the website the Fela data was obtained from
         file_contents = list(filter(lambda x: "※" not in x, file_contents))
 
-        song_boundaries = [i for i, line in enumerate(file_contents) if list(set(line[:-1])) == ["_"]]
+        song_boundaries = [
+            i for i, line in enumerate(file_contents) if list(set(line[:-1])) == ["_"]
+        ]
 
         return file_contents, song_boundaries
 
@@ -244,7 +247,9 @@ class DataProcessorv2:
         file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
 
         song_boundaries = [
-            i for i, line in enumerate(file_contents) if (line.lstrip()[0] == "*" and line.lstrip()[-2] == "*")
+            i
+            for i, line in enumerate(file_contents)
+            if (line.lstrip()[0] == "*" and line.lstrip()[-2] == "*")
         ]
 
         for i in song_boundaries:
@@ -257,7 +262,9 @@ class DataProcessorv2:
         file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
 
         song_boundaries = [
-            i for i, line in enumerate(file_contents) if (line.lstrip()[0] == "*" and line.lstrip()[-2] == "*")
+            i
+            for i, line in enumerate(file_contents)
+            if (line.lstrip()[0] == "*" and line.lstrip()[-2] == "*")
         ]
 
         return file_contents, song_boundaries
@@ -290,10 +297,18 @@ class DataProcessorv2:
         punctuation = punctuation.replace(",", "")
         punctuation = punctuation.replace(";", "")
 
-        return line if len(line) == 1 else (line if line[-2] in punctuation else line.strip() + " ")
+        return (
+            line
+            if len(line) == 1
+            else (line if line[-2] in punctuation else line.strip() + " ")
+        )
 
     def preprocess_file(self, file_contents, file="fela"):
-        assert file in ["fela", "orwell", "poe"], "File must be one of `{}`, `{}`, or `{}`".format("fela", "orwell", "poe")
+        assert file in [
+            "fela",
+            "orwell",
+            "poe",
+        ], "File must be one of `{}`, `{}`, or `{}`".format("fela", "orwell", "poe")
         final_contents = []
 
         if file == "fela":
@@ -328,7 +343,9 @@ class DataProcessorv2:
         processed_chunks = []
 
         for chunk in file_contents:
-            processed_chunks += self.process_file_chunk(file_chunk=chunk, time_steps=time_steps, **kwargs)
+            processed_chunks += self.process_file_chunk(
+                file_chunk=chunk, time_steps=time_steps, **kwargs
+            )
 
         return processed_chunks
 

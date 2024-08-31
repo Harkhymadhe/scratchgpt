@@ -8,11 +8,18 @@ from scripts.data_ops import DataProcessor
 from scripts.test_model import generate_text
 
 
-
 if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    SEED = torch.cuda.manual_seed(42)
+
+    # DEVICE = None
     model_type = "gpt2"
-    model = PretrainedGPT.from_weights(model_type=model_type)
+
+    # Load pretrained weights into my architecture
+    # model = PretrainedGPT.from_weights(model_type=model_type)
+
+    # Load Huggingface architecture directly
+    model = PretrainedGPT._load_weights(model_type=model_type)
     tokenizer = DataProcessor(tokenizer_path="edgar_alan_poe.json")
 
     print("""================================================================""")
@@ -49,15 +56,23 @@ if __name__ == "__main__":
        "Them go turn electric to candle\nGovernment magic\nGovernment magic"""
     test_sequence_f = """And I said to her, "Never let them weigh you down"."""
 
-    temperature = .1
+    temperature = 0.1
     top_k = 50
     length_limit = 100
     post_process = False
     prob_sampling = True
     last_timestep = True
 
+    sequences = [
+        "Hello, I'm a language model,",
+        "My name is Oladele, from Nigeria.",
+        """And I said to her, "Never let them weigh you down".""",
+        "The ability to talk like a human does not mean a machine understands or thinks like one.",
+    ]
+    index = 3
+
     pred_text = generate_text(
-        sequence="Hello, I'm a language model,",
+        sequence=sequences[index],
         model=model,
         tokenizer=tokenizer,
         temperature=temperature,
@@ -66,6 +81,7 @@ if __name__ == "__main__":
         post_process=post_process,
         prob_sampling=prob_sampling,
         last_timestep=last_timestep,
+        device=DEVICE,
     )
     print(pred_text)
 

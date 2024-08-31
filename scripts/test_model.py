@@ -62,7 +62,8 @@ def refactor_state_dict(model_state_dict):
     new_key = "gpt_stem.embedding_system.encoder_pos_embedding.positional_encoder.positional_encoding.weight"
 
     model_state_dict = OrderedDict(
-        ((k, v) if old_key != k else (new_key, v.squeeze())) for k, v in model_state_dict.items()
+        ((k, v) if old_key != k else (new_key, v.squeeze()))
+        for k, v in model_state_dict.items()
     )
     return model_state_dict
 
@@ -74,6 +75,11 @@ def generate_predictions(tokens, model, last_timestep=True):
 
     # Obtain model predictions and extract the embeddings at the last timestep
     logits = model(tokens)
+
+    try:
+        logits = logits["logits"]
+    except:
+        pass
 
     return logits[:, -1:, :] if last_timestep else logits
 
@@ -117,7 +123,11 @@ def generate_text(
     post_process=False,
     prob_sampling=True,
     last_timestep=True,
+    device=None,
 ):
+    if device is None:
+        device = torch.device("cpu")
+
     final_pred_tokens = []
 
     try:
@@ -127,7 +137,10 @@ def generate_text(
     except:
         input_tokens = tokenizer.tokenizer.encode(sequence)
 
-    LEN = model.gpt_stem.embedding_system.encoder_pos_embedding.max_length
+    try:
+        LEN = model.gpt_stem.embedding_system.encoder_pos_embedding.max_length
+    except:
+        LEN = 1024
 
     if special_tokens is None:
         special_tokens = [
@@ -137,6 +150,7 @@ def generate_text(
         ]
 
     model.eval()
+    model.to(device)
 
     try:
         pad_token = tokenizer.tokenizer.eos_token
@@ -144,13 +158,19 @@ def generate_text(
         pad_token = 0
 
     while len(final_pred_tokens) < length_limit:
-        if len(input_tokens) < LEN:
-            padded_tokens = [pad_token for _ in range(LEN - len(input_tokens))] + input_tokens
+        padded_tokens = input_tokens + final_pred_tokens
+
+        if len(padded_tokens) < LEN:
+            padded_tokens = [
+                pad_token for _ in range(LEN - len(padded_tokens))
+            ] + padded_tokens
+        elif len(padded_tokens) > LEN:
+            padded_tokens = padded_tokens[-LEN:]
         else:
-            padded_tokens = input_tokens.copy()
+            pass
 
         # Convert token ids to tensor
-        padded_tokens = torch.tensor(padded_tokens).unsqueeze(0)
+        padded_tokens = torch.tensor(padded_tokens).unsqueeze(0).to(device)
 
         # Generate predicted logits
         logits = generate_predictions(
@@ -193,9 +213,6 @@ def generate_text(
         except:
             pred_token = tokenizer.tokenizer.decode(tokens=pred_tokens[-1:])
 
-        input_tokens += pred_tokens
-        input_tokens = input_tokens[1:]
-
         if pred_token in special_tokens:
             if pred_token == "</s>":
                 print("End of generation!")
@@ -222,7 +239,9 @@ if __name__ == "__main__":
     subfolder = 1
     tokenizer_path = "edgar_alan_poe.json"
 
-    model, tokenizer = load_state_dicts(timestamp=timestamp, subfolder=subfolder, tokenizer_path=tokenizer_path)
+    model, tokenizer = load_state_dicts(
+        timestamp=timestamp, subfolder=subfolder, tokenizer_path=tokenizer_path
+    )
 
     test_sequence_a = "Something must kill man o\nSomething must kill man o\nWhether na water, we no know o"
     test_sequence_b = "Something must kill man\nSomething must kill man o"

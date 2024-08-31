@@ -25,7 +25,7 @@ class TransformerEncoderBlock(nn.Module):
         num_heads=32,
         pre_ln=False,
         dropout_rate=0.1,
-        use_bias=False
+        use_bias=False,
     ):
         super().__init__()
 
