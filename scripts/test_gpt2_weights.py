@@ -9,17 +9,23 @@ from scripts.test_model import generate_text
 
 
 if __name__ == "__main__":
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    SEED = torch.cuda.manual_seed(42)
+    SEED = 42
+
+    if torch.cuda.is_available():
+        DEVICE = torch.device("cuda")
+        torch.cuda.manual_seed(seed=SEED)
+    else:
+        DEVICE = torch.device("cpu")
+        SEED = torch.manual_seed(SEED)
 
     # DEVICE = None
     model_type = "gpt2"
 
     # Load pretrained weights into my architecture
-    # model = PretrainedGPT.from_weights(model_type=model_type)
+    model = PretrainedGPT.from_weights(model_type=model_type)
 
     # Load Huggingface architecture directly
-    model = PretrainedGPT._load_weights(model_type=model_type)
+    # model = PretrainedGPT._load_weights(model_type=model_type)
     tokenizer = DataProcessor(tokenizer_path="edgar_alan_poe.json")
 
     print("""================================================================""")
