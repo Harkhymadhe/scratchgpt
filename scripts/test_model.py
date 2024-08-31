@@ -108,8 +108,135 @@ def multiple_choice_token_selection(
 
 def probabilistic_sampling(logits):
     probs = torch.softmax(logits, dim=-1)
+    probs = probs[probs >= 0]
+    print("Probs:", probs)
     idx_next = torch.multinomial(probs, num_samples=1)
+    print("idx_next:", idx_next)
     return idx_next
+
+
+def generate_text_v1(
+    sequence,
+    model,
+    tokenizer,
+    temperature=1.0,
+    top_k=5,
+    special_tokens=None,
+    length_limit=100,
+    post_process=False,
+    prob_sampling=True,
+    last_timestep=True,
+    device=None,
+):
+    if device is None:
+        device = torch.device("cpu")
+
+    final_pred_tokens = []
+
+    try:
+        input_tokens = tokenizer.tokenizer.encode(
+            sequence=sequence, add_special_tokens=True
+        ).ids
+    except:
+        input_tokens = tokenizer.tokenizer.encode(sequence)
+
+    try:
+        LEN = model.gpt_stem.embedding_system.encoder_pos_embedding.max_length
+    except:
+        LEN = 1024
+
+    if special_tokens is None:
+        special_tokens = [
+            "<s>",
+            "</s>",
+            "<pad>",
+        ]
+
+    model.eval()
+    model.to(device)
+
+    try:
+        pad_token = tokenizer.tokenizer.eos_token
+    except:
+        pad_token = 0
+
+    while len(final_pred_tokens) < length_limit:
+        padded_tokens = input_tokens + final_pred_tokens
+
+        if len(padded_tokens) < LEN:
+            padded_tokens = [
+                pad_token for _ in range(LEN - len(padded_tokens))
+            ] + padded_tokens
+
+            print("Number of input tokens now:", len(padded_tokens))
+        elif len(padded_tokens) > LEN:
+            padded_tokens = padded_tokens[-LEN:]
+        else:
+            pass
+
+        # Convert token ids to tensor
+        padded_tokens = torch.tensor(padded_tokens).unsqueeze(0).to(device)
+
+        # Generate predicted logits
+        logits = generate_predictions(
+            tokens=padded_tokens, model=model, last_timestep=last_timestep
+        )
+
+        if not last_timestep:
+            pred_ = (
+                torch.softmax(logits, dim=-1)
+                .max(dim=-1)
+                .indices.squeeze()
+                .numpy()
+                .tolist()
+            )
+            print(tokenizer.tokenizer.decode(ids=pred_))
+            logits = logits[:, -1:, :]
+
+        # Apply top-k sampling
+        selected_logits = multiple_choice_token_selection(logits, top_k)
+
+        # Apply temperature scaling
+        scaled_logits = temperature_scaling(
+            logits=selected_logits, temperature=temperature
+        )
+
+        # Apply probabilistic sampling
+        if prob_sampling:
+            pred_tokens = probabilistic_sampling(scaled_logits)
+        else:
+            pred_tokens = torch.softmax(scaled_logits, dim=-1).argmax(dim=-1).item()
+
+        pred_tokens = pred_tokens if isinstance(pred_tokens, list) else [pred_tokens]
+
+        # print(pred_tokens)
+        # print(tokenizer.tokenizer.decode(ids=pred_tokens))
+
+        final_pred_tokens += pred_tokens
+        try:
+            pred_token = tokenizer.tokenizer.decode(ids=pred_tokens[-1:])
+        except:
+            pred_token = tokenizer.tokenizer.decode(tokens=pred_tokens[-1:])
+
+        if pred_token in special_tokens:
+            if pred_token == "</s>":
+                print("End of generation!")
+                break
+            continue
+
+    try:
+        pred_text = tokenizer.tokenizer.decode(ids=final_pred_tokens)
+    except:
+        pred_text = tokenizer.tokenizer.decode(tokens=final_pred_tokens)
+
+    if post_process:
+        pred_text = pred_text.replace("\n ", "\n")
+
+    return {
+        "original_text": sequence,
+        "predicted_text": pred_text,
+        "combined_text": sequence + pred_text,
+    }
 
 
 def generate_text(
@@ -164,6 +291,8 @@ def generate_text(
             padded_tokens = [
                 pad_token for _ in range(LEN - len(padded_tokens))
             ] + padded_tokens
+
+            print("Number of input tokens now:", len(padded_tokens))
         elif len(padded_tokens) > LEN:
             padded_tokens = padded_tokens[-LEN:]
         else:
@@ -188,19 +317,17 @@ def generate_text(
             print(tokenizer.tokenizer.decode(ids=pred_))
             logits = logits[:, -1:, :]
 
+        # Apply softmax
+        logits = torch.softmax(logits, dim=-1)
+
         # Apply top-k sampling
-        selected_logits = multiple_choice_token_selection(logits, top_k)
+        top_k_probs, top_k_indices = torch.topk(logits, top_k)
 
-        # Apply temperature scaling
-        scaled_logits = temperature_scaling(
-            logits=selected_logits, temperature=temperature
-        )
+        print("top_k_probs:", top_k_probs.shape)
 
-        # Apply probabilistic sampling
-        if prob_sampling:
-            pred_tokens = probabilistic_sampling(scaled_logits)
-        else:
-            pred_tokens = torch.softmax(scaled_logits, dim=-1).argmax(dim=-1).item()
+        idx = torch.multinomial(top_k_probs.squeeze(), 1)
+
+        pred_tokens = torch.gather(top_k_indices.squeeze(), -1, idx).item()
 
         pred_tokens = pred_tokens if isinstance(pred_tokens, list) else [pred_tokens]
 
