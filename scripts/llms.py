@@ -189,7 +189,7 @@ class PretrainedGPT(nn.Module):
         return self.pretrained_head(x)
 
     @classmethod
-    def load_weights(cls, model_type="gpt2"):
+    def _load_weights(cls, model_type="gpt2"):
         model_types = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl"]
         assert model_type in model_types, (
             "`model_type` must be one of {}".format(", ".join(model_types[:-1]) + "and " + model_types[-1]))
@@ -198,7 +198,7 @@ class PretrainedGPT(nn.Module):
         return pretrained_gpt
 
     @classmethod
-    def map_weights_to_layers(cls, pretrained_model):
+    def _map_weights_to_layers(cls, pretrained_model, pre_ln=True, narrow=True, dropout_rate=.5, share_weights=True):
         print(pretrained_model.config)
         num_heads = pretrained_model.config.n_head
         num_layers = pretrained_model.config.n_layer
@@ -212,11 +212,11 @@ class PretrainedGPT(nn.Module):
             max_token=max_token,
             embedding_dim=embedding_dim,
             num_decoder_blocks=num_layers,
-            narrow=True,
-            pre_ln=True,
+            narrow=narrow,
+            pre_ln=pre_ln,
             train_pwe=True,
-            share_weights=True,
-            dropout_rate=0.1,
+            share_weights=share_weights,
+            dropout_rate=dropout_rate,
             use_bias=False,
         )
 
@@ -285,16 +285,23 @@ class PretrainedGPT(nn.Module):
 
         ### Load weights for final token prediction head
         # TODO: Use this...
-        # model.pretrained_head.decoder_head.weight = pretrained_gpt['transformer.wte.weight']
-        # model.pretrained_head.decoder_head.bias = pretrained_gpt['transformer.wte.bias']
-
-        # TODO: ...or this
-        model.pretrained_head.decoder_head.weight = nn.Parameter(pretrained_gpt['lm_head.weight'])
-        model.pretrained_head.decoder_head.bias = nn.Parameter(torch.zeros(pretrained_gpt['lm_head.weight'].shape[0]))
+        if share_weights:
+            model.pretrained_head.decoder_head.weight = pretrained_gpt['transformer.wte.weight']
+            model.pretrained_head.decoder_head.bias = pretrained_gpt['transformer.wte.bias']
+        else:
+            # TODO: ...or this
+            model.pretrained_head.decoder_head.weight = nn.Parameter(pretrained_gpt['lm_head.weight'])
+            model.pretrained_head.decoder_head.bias = nn.Parameter(torch.zeros(pretrained_gpt['lm_head.weight'].shape[0]))
 
         return model
 
     @classmethod
-    def from_weights(cls, model_type="gpt2"):
-        pretrained_model = cls.load_weights(model_type=model_type)
-        return cls.map_weights_to_layers(pretrained_model=pretrained_model)
+    def from_weights(cls, model_type="gpt2", pre_ln=True, narrow=True, dropout_rate=.5, share_weights=False):
+        pretrained_model = cls._load_weights(model_type=model_type)
+        return cls._map_weights_to_layers(
+            pretrained_model=pretrained_model,
+            pre_ln=pre_ln,
+            narrow=narrow,
+            dropout_rate=dropout_rate,
+            share_weights=share_weights
+        )
