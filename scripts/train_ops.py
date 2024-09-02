@@ -101,6 +101,11 @@ def training_loop_with_batch(
             with torch.cuda.amp.autocast(dtype=torch.bfloat16):
                 y_pred = model(train_batch_sequences)
 
+                try:
+                    y_pred = y_pred['logits']
+                except:
+                    pass
+
                 # Compare actual targets and predicted targets to get the loss
                 if use_last:
                     train_loss = criterion(y_pred[:, -1, :], train_batch_targets[:, -1])
