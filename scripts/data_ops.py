@@ -29,6 +29,7 @@ class DataTokenizer:
         special_tokens=None,
         enable_padding=False,
         enable_truncation=False,
+        use_gpt2_tokenizer=False,
     ) -> None:
         """Tokenization object for tokenizing text corpus.
 
@@ -47,6 +48,7 @@ class DataTokenizer:
 
         if tokenizer is not None:
             self.tokenizer = tokenizer
+            self.vocab_size = tokenizer.get_vocab_size()
         else:
             tokenizer = Tokenizer(BPE())
 
@@ -57,7 +59,7 @@ class DataTokenizer:
 
             self.tokenizer = tokenizer
 
-        self.vocab_size = vocab_size
+            self.vocab_size = vocab_size
 
         if isinstance(file_names, (list, tuple, set)) or file_names is None:
             self.file_names = file_names
@@ -71,6 +73,8 @@ class DataTokenizer:
         self.max_length = max_length
         self.enable_padding = enable_padding
         self.enable_truncation = enable_truncation
+
+        self.use_gpt2_tokenizer = use_gpt2_tokenizer
 
         if enable_padding:
             self.tokenizer.enable_padding(
@@ -130,6 +134,11 @@ class DataTokenizer:
 
     @classmethod
     def from_pretrained(cls, tokenizer_name):
+        if tokenizer_name.replace(".json", "").lower() == "gpt2":
+            use_gpt2_tokenizer = True
+        else:
+            use_gpt2_tokenizer = False
+
         tokenizer_name = (
             tokenizer_name + ".json"
             if not tokenizer_name.endswith(".json")
@@ -139,6 +148,7 @@ class DataTokenizer:
         tokenizer = cls(
             file_names=os.path.splitext(tokenizer_name)[0],
             tokenizer=Tokenizer.from_file(path),
+            use_gpt2_tokenizer=use_gpt2_tokenizer,
         )
         return tokenizer
 
@@ -202,6 +212,15 @@ class DataProcessorv2:
         self.min_length = min_length
 
         self.tokenizer = DataTokenizer.from_pretrained(tokenizer_name)
+        self.use_gpt2_tokenizer = self.tokenizer.use_gpt2_tokenizer
+
+        if self.use_gpt2_tokenizer:
+            self.eos_token = "<|endoftext|>"
+            self.bos_token = "<|endoftext|>"
+        else:
+            self.eos_token = "</s>"
+            self.bos_token = "<s>"
+
         self.tokenized_content = None
         self.num_tokens = None
 
@@ -219,19 +238,6 @@ class DataProcessorv2:
 
         return content
 
-    def preprocess_fela_file_v1(self, file_contents):
-        # Filter out lines linking to the website the Fela data was obtained from
-        file_contents = list(filter(lambda x: "※" not in x, file_contents))
-
-        song_boundaries = [
-            i for i, line in enumerate(file_contents) if list(set(line[:-1])) == ["_"]
-        ]
-
-        for i in song_boundaries:
-            file_contents[i] = "</s>\n<s>\n"
-
-        return file_contents
-
     def preprocess_fela_file(self, file_contents):
         # Filter out lines linking to the website the Fela data was obtained from
         file_contents = list(filter(lambda x: "※" not in x, file_contents))
@@ -241,21 +247,6 @@ class DataProcessorv2:
         ]
 
         return file_contents, song_boundaries
-
-    def preprocess_edgar_file_v1(self, file_contents):
-        # Filter out lines filled with whitespaces
-        file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
-
-        song_boundaries = [
-            i
-            for i, line in enumerate(file_contents)
-            if (line.lstrip()[0] == "*" and line.lstrip()[-2] == "*")
-        ]
-
-        for i in song_boundaries:
-            file_contents[i] = "</s>\n<s>\n"
-
-        return file_contents
 
     def preprocess_edgar_file(self, file_contents):
         # Filter out lines filled with whitespaces
@@ -268,19 +259,6 @@ class DataProcessorv2:
         ]
 
         return file_contents, song_boundaries
-
-    def preprocess_orwell_file_v1(self, file_contents):
-        # Filter out lines filled with whitespaces
-        file_contents = list(filter(lambda x: len(x.lstrip()) != 0, file_contents))
-
-        song_boundaries = [
-            i for i, line in enumerate(file_contents) if line.startswith("THE END")
-        ]
-
-        for i in song_boundaries:
-            file_contents[i] = "</s>\n<s>\n"
-
-        return file_contents
 
     def preprocess_orwell_file(self, file_contents):
         # Filter out lines filled with whitespaces
@@ -323,14 +301,14 @@ class DataProcessorv2:
             common_lines = file_contents[start_idx:i]
             common_lines = list(map(self.preprocess_line, common_lines))
             book = "".join(common_lines)
-            final_contents.append("<s>\n" + book + "\n</s>")
+            final_contents.append(f"{self.bos_token}\n" + book + f"\n{self.eos_token}")
             start_idx = i + 1
 
         if start_idx < len(file_contents) - 1:
             common_lines = file_contents[start_idx:]
             common_lines = list(map(self.preprocess_line, common_lines))
             book = "".join(common_lines)
-            final_contents.append("<s>\n" + book + "\n</s>")
+            final_contents.append(f"{self.bos_token}\n" + book + f"\n{self.eos_token}")
 
         return final_contents
 
