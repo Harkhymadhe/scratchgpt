@@ -40,6 +40,8 @@ def training_loop_with_batch(
     num_steps = len(iter(train_dataloader))
     lr = optimizer.param_groups[0]["lr"]
 
+    model = model.to(device)
+
     if scheduler is None:
         if use_scheduler:
             if chained_scheduler:
@@ -171,6 +173,11 @@ def training_loop_with_batch(
                 with torch.cuda.amp.autocast(dtype=torch.bfloat16):
                     y_pred_ = model(test_batch_sequences)
 
+                    try:
+                        y_pred_ = y_pred_['logits']
+                    except:
+                        pass
+
                     # Compare actual targets and predicted targets to get the loss
                     if use_last:
                         test_loss = criterion(
@@ -233,9 +240,9 @@ def training_loop_with_batch(
         TEST_ACCS.append(avg_test_acc)
         TEST_PERPLEXITY.append(avg_test_perplexity)
 
-    # Clear CUDA cache
-    torch.cuda.empty_cache()
-    torch.clear_autocast_cache()
+        # Clear CUDA cache
+        torch.cuda.empty_cache()
+        torch.clear_autocast_cache()
 
     # Return persisted results
 
