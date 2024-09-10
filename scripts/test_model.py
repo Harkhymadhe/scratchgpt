@@ -10,49 +10,70 @@ from collections import OrderedDict
 from scripts.llms import PretrainedGPT
 from scripts.data_ops_v1 import DataProcessor
 
+from peft import LoraConfig, get_peft_model
+
 __all__ = [
     "load_state_dicts",
 ]
 
 
-def load_state_dicts(timestamp, subfolder=1, tokenizer_path="works_of_fela.json"):
+def load_state_dicts(timestamp, subfolder=1, tokenizer_path="works_of_fela.json", lora=False):
     """Load the trained model for use."""
 
-    folder = f"../artefacts/models/{timestamp}/{subfolder}"
-    file_paths = [os.path.join(folder, f) for f in os.listdir(folder)]
-    file_paths.sort()
+    if lora:
+        tokenizer_path = "gpt2"
 
-    state_dict_path, _, model_config_path = file_paths
-    print(file_paths)
+        model = PretrainedGPT._load_weights(tokenizer_path)
+        for param in model.parameters():
+            param.requires_grad = False
 
-    model_kwargs = dict(json.load(open(model_config_path, "r")))
+        # LoRa
+        config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM"
+        )
 
-    tokenizer = DataProcessor(tokenizer_path=tokenizer_path)
+        model = get_peft_model(model, config)
+    else:
 
-    state_dict = torch.load(state_dict_path, map_location="cpu")
+        folder = f"../artefacts/models/{timestamp}/{subfolder}"
+        file_paths = [os.path.join(folder, f) for f in os.listdir(folder)]
+        file_paths.sort()
 
-    model_state_dict = state_dict["model_state"]
+        state_dict_path, _, model_config_path = file_paths
+        print(file_paths)
 
-    for n in model_state_dict:
-        print(n)
+        model_kwargs = dict(json.load(open(model_config_path, "r")))
 
-    # print(model_state_dict)
+        state_dict = torch.load(state_dict_path, map_location="cpu")
 
-    for k, v in model_kwargs.items():
-        print(k, type(v), v)
+        model_state_dict = state_dict["model_state"]
 
-    model = PretrainedGPT(**model_kwargs)
+        for n in model_state_dict:
+            print(n)
 
-    try:
-        model.load_state_dict(state_dict=model_state_dict)
-    except:
-        model_state_dict = refactor_state_dict(model_state_dict)
-        model.load_state_dict(state_dict=model_state_dict)
+        # print(model_state_dict)
+
+        for k, v in model_kwargs.items():
+            print(k, type(v), v)
+
+
+        model = PretrainedGPT(**model_kwargs)
+
+        try:
+            model.load_state_dict(state_dict=model_state_dict)
+        except:
+            model_state_dict = refactor_state_dict(model_state_dict)
+            model.load_state_dict(state_dict=model_state_dict)
 
     for param in model.parameters():
         param.requires_grad_(False)
 
     model.eval()
+    tokenizer = DataProcessor(tokenizer_path)
 
     return model, tokenizer
 
@@ -318,6 +339,9 @@ def generate_text(
             logits = logits[:, -1:, :]
 
         # Apply softmax
+        if temperature > 0:
+            logits /= temperature
+
         logits = torch.softmax(logits, dim=-1)
 
         # Apply top-k sampling
@@ -362,36 +386,92 @@ def generate_text(
 
 
 if __name__ == "__main__":
-    timestamp = "20240814"
-    subfolder = 1
-    tokenizer_path = "edgar_alan_poe.json"
+    SEED = 42
+
+    INFO = {
+        "orwell": {
+            "tokenizer_path": "george_orwell.json",
+            "timestamp": "20240905",
+            "subfolder": 1
+        },
+        "poe": {
+            "tokenizer_path": "edgar-alan_poe.json",
+            "timestamp": "20240905",
+            "subfolder": 2
+        }
+    }
+
+    key = input("Input one of `orwell` or `poe`: ").lower().strip()
+    KEY_DICT = INFO[key]
+
+    if torch.cuda.is_available():
+        DEVICE = torch.device("cuda")
+        torch.cuda.manual_seed(seed=SEED)
+    else:
+        DEVICE = torch.device("cpu")
+        SEED = torch.manual_seed(SEED)
+
+    lora = False
+
+    if lora:
+        timestamp = KEY_DICT['timestamp']
+    else:
+        timestamp = "20240905" if "poe" in key else "20240827"
+
+    subfolder = KEY_DICT['subfolder']
+    tokenizer_path = KEY_DICT['tokenizer_path']
 
     model, tokenizer = load_state_dicts(
-        timestamp=timestamp, subfolder=subfolder, tokenizer_path=tokenizer_path
+        timestamp=timestamp, subfolder=subfolder, tokenizer_path=tokenizer_path, lora=lora
     )
 
-    test_sequence_a = "Something must kill man o\nSomething must kill man o\nWhether na water, we no know o"
-    test_sequence_b = "Something must kill man\nSomething must kill man o"
-    test_sequence_c = (
-        "Trouble dey sleep, yanga go wake am\nTrouble dey sleep, yanga go wake am\n"
-        "Who send you, I neva know o"
-    )
-    test_sequence_d = "Please generate some songs by Fela:"
-    test_sequence_e = """Them go dabaru everything\nThem go turn green into white\nThem go turn red into blue
-    "\nWater dey go, water dey come"
-    "Water dey go, water dey come\nThem go turn electric to candle\n"
-    "Them go turn electric to candle\nGovernment magic\nGovernment magic"""
-    test_sequence_f = """And I said to her, "Never let them weigh you down"."""
 
-    temperature = 1.0
+    alan_poe_context_1 = """How truthful an air of lamentations hangs here upon every syllable! It pervades all."""
+
+    alan_poe_context_2 = "The initial consideration was that of extent. If any literary work is too long to be read at one sitting,"
+
+    alan_poe_context_3 = "It appears evident, then, that there is a distinct limit,"
+
+    alan_poe_context_4 = "By the murmur of a spring,\nOr the least boughs rustleling,"
+
+
+    orwell_context_1 = """St Athelstan's Church stood at the highest point of Knype Hill, and if you chose to climb the tower you could see ten miles or so across the surrounding country.  Not that there was anything worth looking at--only the low, barely undulating East Anglian landscape, intolerably dull in summer, but redeemed in winter by the recurring patterns of the elms, naked and fanshaped against leaden skies."""
+
+    orwell_context_2 = """Most people who bother with the matter at all would admit that the English language is in a bad way, but it is generally assumed that we cannot by conscious action do anything about it. Our civilization is decadent, and our language--so the argument runs--must inevitably share in the general collapse. It follows that any struggle against the abuse of language is a sentimental archaism, like preferring candles to electric light or hansom cabs to aeroplanes. Underneath this lies the half-conscious belief that language is a natural growth and not an instrument which we shape for our own purposes."""
+
+    orwell_context_3 = """It was part of the economy drive in preparation for Hate Week. The flat was seven flights up, and Winston, who was thirty-nine and had a varicose ulcer above his right ankle, went slowly, resting several times on the way. On each landing, opposite the lift-shaft, the poster with the enormous face gazed from the wall. It was one of those pictures which are so contrived that the eyes follow you about when you move. BIG BROTHER IS WATCHING YOU, the caption beneath it ran."""
+
+    orwell_context_4 = """The pool was swarming with bream, small ones, about four to six inches long. """
+
+    POE_CONTEXTS = [
+        alan_poe_context_1,
+        alan_poe_context_2,
+        alan_poe_context_3,
+        alan_poe_context_4,
+    ]
+
+    ORWELL_CONTEXTS = [
+        orwell_context_1,
+        orwell_context_2,
+        orwell_context_3,
+        orwell_context_4,
+    ]
+
+    CONTEXTS = POE_CONTEXTS if "poe" in key else ORWELL_CONTEXTS
+
+    index = 0
+
+
+    # Hyperparameters for generation
+    temperature = 0.5
     top_k = 50
-    length_limit = 100
+    length_limit = 50
     post_process = False
     prob_sampling = True
     last_timestep = True
 
     pred_text = generate_text(
-        sequence=test_sequence_f.lower(),
+        sequence=CONTEXTS[index].lower() if not lora else CONTEXTS[index],
         model=model,
         tokenizer=tokenizer,
         temperature=temperature,
@@ -400,6 +480,7 @@ if __name__ == "__main__":
         post_process=post_process,
         prob_sampling=prob_sampling,
         last_timestep=last_timestep,
+        device=DEVICE,
     )
     print(pred_text)
 

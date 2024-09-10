@@ -326,17 +326,13 @@ class PretrainedGPT(nn.Module):
         ### Load weights for final token prediction head
         # TODO: Use this...
         if share_weights:
-            model.pretrained_head.decoder_head.weight = pretrained_gpt[
-                "transformer.wte.weight"
-            ]
-            model.pretrained_head.decoder_head.bias = pretrained_gpt[
-                "transformer.wte.bias"
-            ]
+            model.pretrained_head.decoder_head.weight = model.gpt_stem.embedding_system.encoder_embedding.embedding_layer.weight
         else:
             # TODO: ...or this
             model.pretrained_head.decoder_head.weight = nn.Parameter(
                 pretrained_gpt["lm_head.weight"]
             )
+
             model.pretrained_head.decoder_head.bias = nn.Parameter(
                 torch.zeros(pretrained_gpt["lm_head.weight"].shape[0])
             )

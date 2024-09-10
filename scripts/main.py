@@ -17,6 +17,8 @@ import json
 if __name__ == "__main__":
     from argparse import ArgumentParser
 
+    USE_HUGGINGFACE = False
+
     args = ArgumentParser()
 
     args.add_argument("--files", type=str, default=None)
@@ -26,11 +28,14 @@ if __name__ == "__main__":
     args = args.parse_args()
 
     if args.files is None:
-        file_names = "george_orwell.txt"
+        file_names = "edgar_alan_poe.txt"
     else:
         file_names = args.files
 
-    tokenizer_name = os.path.splitext(file_names)[0] + ".json"
+    if USE_HUGGINGFACE:
+        tokenizer_name = "gpt2"
+    else:
+        tokenizer_name = os.path.splitext(file_names)[0] + ".json"
 
     # Set hyperparameters
     model_kwargs = dict(json.load(open("../config/model_config.json")))
@@ -57,9 +62,11 @@ if __name__ == "__main__":
     use_last = hyperparameter_kwargs["use_last"]
 
     batch_size_in_tokens = 2**19
-    batch_size = 32
-    gradient_accumulation_steps = 10
-    # gradient_accumulation_steps = batch_size_in_tokens / (batch_size * seq_len)
+    batch_size = 64
+    # gradient_accumulation_steps = 10
+    gradient_accumulation_steps = batch_size_in_tokens / (batch_size * seq_len)
+
+    print("Number of grad accum steps:", gradient_accumulation_steps)
 
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -88,7 +95,7 @@ if __name__ == "__main__":
         min_length=seq_len,
         train=False,
         frac=test_frac,
-        augment_data=augment_data,
+        augment_data=False,
     )
 
     # Generate dataloader
@@ -107,18 +114,24 @@ if __name__ == "__main__":
     torch.set_float32_matmul_precision("high")
 
     # Instantiate model
-    model = PretrainedGPT(
-        narrow=narrow,
-        num_heads=num_heads,
-        num_decoder_blocks=num_decoder_blocks,
-        num_embeddings=train_dataset.data_processor.get_vocab_size(),
-        embedding_dim=embedding_dim,
-        max_token=max_token,
-        pre_ln=pre_ln,
-        train_pwe=train_pwe,
-        share_weights=share_weights,
-        dropout_rate=dropout_rate,
-    )
+
+    if not USE_HUGGINGFACE:
+
+        model = PretrainedGPT(
+            narrow=narrow,
+            num_heads=num_heads,
+            num_decoder_blocks=num_decoder_blocks,
+            num_embeddings=train_dataset.data_processor.get_vocab_size(),
+            embedding_dim=embedding_dim,
+            max_token=max_token,
+            pre_ln=pre_ln,
+            train_pwe=train_pwe,
+            share_weights=share_weights,
+            dropout_rate=dropout_rate,
+        )
+    else:
+        model = PretrainedGPT._load_weights(model_type = "gpt2")
+
     model.to(device)
 
     # # Compile model
@@ -181,7 +194,7 @@ if __name__ == "__main__":
         epochs=epochs,
         device=device,
         gradient_accumulation_steps=gradient_accumulation_steps,
-        warmup_steps=10,
+        warmup_steps=1000,
         chained_scheduler=False,
         use_scheduler=True,
         resume_training=False,

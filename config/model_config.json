@@ -3,10 +3,10 @@
     "num_heads": 2,
     "num_decoder_blocks": 4,
     "num_embeddings": 4096,
-    "embedding_dim": 128,
+    "embedding_dim": 256,
     "max_token": 256,
     "pre_ln": true,
     "share_weights": true,
-    "dropout_rate": 0.5,
+    "dropout_rate": 0.1,
     "train_pwe": true
 }
