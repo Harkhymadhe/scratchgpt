@@ -76,6 +76,20 @@ The general architecture of the GPT models is shown in the image below:
 <p align="center">Image Credit: <a href="https://dugas.ch/artificial_curiosity/GPT_architecture.html">Dugas' blog</a></p>
 
 ---
+
+### Model Training
+
+To train the models, do the following:
+
+```bash
+$ cd scripts
+$ python main.py --use_huggingface USE_HUGGINGFACE --vocab_size VOCAB_SIZE -- files FILE_NAME
+```
+
+__NOTE__: `USE_HUGGINGFACE` may be `True` or `False` (default is `False`), `VOCAB_SIZE` may be any number (default is `50,000`), 
+and `FILE_NAME` must be one of `edgar_alan_poe.txt`, `george_orwell.txt`, or `works_of_fela.txt`.  
+
+---
 ### Running tests
 
 ---
