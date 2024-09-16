@@ -2,13 +2,12 @@
 
 import os
 import torch
-import numpy as np
 import json
 
 from collections import OrderedDict
 
-from scripts.llms import PretrainedGPT
-from scripts.data_ops_v1 import DataProcessor
+from llms import PretrainedGPT
+from data_ops import DataProcessor
 
 from peft import LoraConfig, get_peft_model
 
@@ -404,14 +403,16 @@ if __name__ == "__main__":
     key = input("Input one of `orwell` or `poe`: ").lower().strip()
     KEY_DICT = INFO[key]
 
+    lora = bool(int(input("Use LoRA-finetuned model? `0` for No, `1` for Yes: ").strip()))
+
+    index = int(input("Select prompt index (0 - 3): ").strip())
+
     if torch.cuda.is_available():
         DEVICE = torch.device("cuda")
         torch.cuda.manual_seed(seed=SEED)
     else:
         DEVICE = torch.device("cpu")
         SEED = torch.manual_seed(SEED)
-
-    lora = False
 
     if lora:
         timestamp = KEY_DICT['timestamp']
@@ -458,8 +459,6 @@ if __name__ == "__main__":
     ]
 
     CONTEXTS = POE_CONTEXTS if "poe" in key else ORWELL_CONTEXTS
-
-    index = 0
 
 
     # Hyperparameters for generation
