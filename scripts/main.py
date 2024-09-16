@@ -4,9 +4,9 @@ import os.path
 import torch
 from torch.utils.data import DataLoader
 
-from scripts.llms import PretrainedGPT
-from scripts.data_ops_v1 import TextDataset
-from scripts.train_ops import training_loop_with_batch
+from llms import PretrainedGPT
+from data_ops import TextDataset
+from train_ops import training_loop_with_batch
 
 from torch import optim
 
@@ -17,13 +17,13 @@ import json
 if __name__ == "__main__":
     from argparse import ArgumentParser
 
-    USE_HUGGINGFACE = False
-
     args = ArgumentParser()
 
     args.add_argument("--files", type=str, default=None)
 
     args.add_argument("--vocab_size", type=int, default=50000)
+
+    args.add_argument("--use_huggingface", type=bool, default=False)
 
     args = args.parse_args()
 
@@ -31,6 +31,11 @@ if __name__ == "__main__":
         file_names = "edgar_alan_poe.txt"
     else:
         file_names = args.files
+
+    if args.use_huggingface is None:
+        USE_HUGGINGFACE = True
+    else:
+        USE_HUGGINGFACE = args.use_huggingface
 
     if USE_HUGGINGFACE:
         tokenizer_name = "gpt2"
