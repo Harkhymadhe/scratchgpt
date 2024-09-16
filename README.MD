@@ -1,35 +1,19 @@
-## LLM
+## ScratchGPT
 
 ---
 
 ### Overview
 
 ---
-This project is an attempt to code up the GPT model family from scratch. This involved coding p the below:
+This project is an attempt to code up the GPT model family from scratch. The developed models are then used for 
+stylistic text generation in the styles of `Edgar Allan Poe` and `George Orwell`. To achieve this, the following were done:
+
 
 1. Attention mechanism
-    
-    a. Self- and Cross-attention (&#9989;)
-
-    b. Wide and Narrow attention (&#9989;)
-    
-    c. Positional encoding (&#9083;, &#8987;)
-
-
 2. Transformer architecture
+3. Positional encoding (absolute and relative)
+4. GPT architecture
 
-    a. Transformer v1 i.e., Encoder-Decoder (&#9989;)
-
-    b. Transformer v2 i.e., Decoder-only (&#9989;)
-
-
-3. GPT family
-
-   a. GPT-1 (full version &#9989;)
-   
-   b. GPT-2 (full version &#9989;)
-   
-   c. GPT-3 (reduced version &#9989;)
 
 
 The default hyperparameters for the GPT family are as tabulated below:
@@ -65,19 +49,7 @@ The structure of the repo is as such:
 
 ### Architectural structures
 
----
-
-***GPT-1***
-&#9989;
-
----
-***GPT-2***
-&#9989;
-
----
-***GPT-3***
-
-Reduced version &#9989;
+The general architecture of the GPT models is shown in the image below:
 
 <a href="https://dugas.ch/artificial_curiosity/img/GPT_architecture/fullarch.png">![Full size](assets/gpt-arch.png)</a>
 <p align="center">Image Credit: <a href="https://dugas.ch/artificial_curiosity/GPT_architecture.html">Dugas' blog</a></p>
