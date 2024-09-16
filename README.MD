@@ -120,6 +120,14 @@ Test `test name` succeeded!
 | &#9888;  | Excluded file; present in `.gitignore` |
 | &#8987;  | Work in progress                       |
 
-### Note:
-1.  GPT-3 and BLOOM versions will be implemented at somewhere between a fifth to a tenth of their cannon size (subject to changes). For instance, GPT-3 has 96 stacked decoder blocks in practice. Here, it will be implemented with 9 decoder blocks.
+### Model Inference
 
+To run inference on the trained models, the following steps are to be followed:
+
+```bash
+$ cd scripts
+$ python test_model.py
+```
+This should prompt a selection process for the dataset in question (`edgar` or `poe`), whether to use the LoRA model, 
+and what prompt to test on. Finally, select one of four prompts to generate text  with. 
+The selected model will then be automatically used to generate completions, which will be printed on screen.
