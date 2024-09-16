@@ -29,22 +29,43 @@ The default hyperparameters for the GPT family are as tabulated below:
 
 ---
 
-The structure of the repo is as such:
+The structure of the repo is as outlined below:
 
 ```text
 .
-├── README.MD
-├── main.py (⚠, ⌛)
+├── artefacts
+│   └── metrics
+│   └── models
+│   └── tokenizers
 ├── assets
 │   └── gpt-arch.png
-├── data
-│   └── io.py (⚠, ⌛)
-├── main.py
-└── scripts
-    ├── architectures.py
-    ├── attention.py
-    ├── llms.py
-    └── tests.py
+├── config
+│   └── hyperparameters_config.json
+│   └── model_config.json
+├── datasets
+│   └── raw
+│   └── preprocessed
+├── scripts
+│   ├── __init__.py
+│   ├── architectures.py
+│   ├── architectures_test.py
+│   ├── attention.py
+│   ├── attention_test.py
+│   ├── data_ops.py
+│   ├── data_ops_test.py
+│   ├── encoding.py
+│   ├── encoding_test.py
+│   ├── eval.py
+│   ├── llms.py
+│   ├── llms_test.py
+│   ├── main.py
+│   ├── test_gpt2_weights.py
+│   ├── test_model.py
+│   ├── tests.py
+│   └── train_ops.py
+├── .gitignore
+├── README.md
+└── requirements.txt
 ```
 
 ### Architectural structures
@@ -80,17 +101,17 @@ Test `test name` succeeded!
 ```
 
 
-### Legend
+### Model Evaluation
 
----
+To run metric evaluation on the trained models, the following steps are to be followed:
 
-| Symbol   | Meaning                                |
-|----------|----------------------------------------|
-| &#9989;  | Implemented successfully               |
-| &#10060; | Implemented; incomplete or failing     |
-| &#9083;  | Placeholder in place; work in progress |
-| &#9888;  | Excluded file; present in `.gitignore` |
-| &#8987;  | Work in progress                       |
+```bash
+$ cd scripts
+$ python eval.py
+```
+
+This will populate the `./artefacts/metrics` folder with evaluation results.
+
 
 ### Model Inference
 
