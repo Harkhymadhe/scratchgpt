@@ -3,9 +3,9 @@
 import torch
 import tiktoken
 
-from scripts.llms import PretrainedGPT
-from scripts.data_ops import DataProcessor
-from scripts.test_model import generate_text
+from llms import PretrainedGPT
+from data_ops import DataProcessor
+from test_model import generate_text
 
 
 if __name__ == "__main__":
