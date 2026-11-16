@@ -9,5 +9,9 @@ scripts/scrap.py
 /datasets
 /artefacts
 report.MD
-/.ipynb_checkpoints
-/__pycache__
+.ipynb_checkpoints
+__pycache__
+*egg-info
+
+# Roopik IDE metadata
+.roopik/
